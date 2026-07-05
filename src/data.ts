@@ -56,6 +56,7 @@ export const DEMO_SESSIONS: Session[] = [
     caseId: 'CASE-1092',
     caseTitle: 'دعوى تجارية - تنفيذ شروط العقد المبرم ومطالبة بمستحقات مالية',
     date: '2026-07-05',
+    hijriDate: '١٩ محرم ١٤٤٨ هـ',
     day: 'الأحد',
     time: '09:30 ص',
     plaintiff: 'مؤسسة الابتكار التقني للتجارة',

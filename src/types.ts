@@ -7,6 +7,7 @@ export interface Lawyer {
   email: string;
   phone: string;
   password?: string; // Optional or mandatory, let's make it optional but present
+  role?: 'lawyer';
 }
 
 export interface Tenant {
@@ -16,6 +17,7 @@ export interface Tenant {
   email: string;
   phone: string;
   password?: string; // Optional or mandatory, let's make it optional but present
+  role?: 'tenant';
 }
 
 export interface UserSession {
@@ -23,6 +25,7 @@ export interface UserSession {
   name: string;
   email: string;
   role: Role;
+  phone?: string;
 }
 
 export interface Session {
@@ -39,6 +42,11 @@ export interface Session {
   courtRoom: string;      // قاعة المحكمة / الدائرة
   status: 'scheduled' | 'postponed' | 'completed'; // مجدولة | مؤجلة | منتهية
   notes?: string;
+  city?: string;            // المدينة
+  circuitNo?: string;       // رقم الدائرة
+  hijriDate?: string;       // التاريخ الهجري
+  agencyNo?: string;        // رقم الوكالة
+  agencyExpiryDate?: string; // تاريخ انتهاء الوكالة
 }
 
 export interface Invoice {
@@ -54,11 +62,12 @@ export interface Invoice {
 
 export interface Notification {
   id: string;
-  targetRole: 'lawyer' | 'tenant' | 'all';
+  targetRole: 'lawyer' | 'tenant' | 'all' | 'custom';
   targetId: string;       // معرف المحامي أو المستأجر المستهدف
   title: string;
   message: string;
   timestamp: string;      // تاريخ ووقت الإشعار
   isRead: boolean;
   type: 'session' | 'invoice' | 'system';
+  sender?: string;        // الجهة أو الموظف المرسل للإشعار
 }

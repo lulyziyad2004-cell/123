@@ -10,7 +10,6 @@ import {
   CheckCircle2, 
   AlertCircle,
   HelpCircle,
-  DollarSign,
   Phone,
   ArrowLeft,
   CreditCard,
@@ -36,6 +35,7 @@ interface TenantDashboardProps {
     type: 'session' | 'invoice' | 'system'
   ) => void;
   loggedTenantId?: string;
+  onClearNotifications?: () => void;
 }
 
 export default function TenantDashboard({
@@ -47,7 +47,8 @@ export default function TenantDashboard({
   onMarkNotificationRead,
   onUpdateInvoiceStatus,
   onTriggerNotification,
-  loggedTenantId
+  loggedTenantId,
+  onClearNotifications
 }: TenantDashboardProps) {
   // Payment Modal State
   const [activePaymentInvoice, setActivePaymentInvoice] = useState<Invoice | null>(null);
@@ -69,13 +70,16 @@ export default function TenantDashboard({
   }
 
   // Filter sessions and invoices for this active client
-  const tenantSessions = sessions.filter(s => s.tenantId === activeTenant.id);
-  const tenantInvoices = invoices.filter(i => i.tenantId === activeTenant.id);
+  const tenantSessions = sessions.filter(s => s.tenantId === activeTenant.id || s.tenantId === activeTenant.name);
+  const tenantInvoices = invoices.filter(i => i.tenantId === activeTenant.id || i.tenantName === activeTenant.name);
   
-  // Filter notifications for this active client
-  const tenantNotifications = notifications.filter(
-    n => (n.targetRole === 'tenant' && n.targetId === activeTenant.id) || n.targetRole === 'all'
-  );
+  // Filter notifications for this active client sorted chronologically (Newest first, excluding system welcome)
+  const tenantNotifications = [...notifications]
+    .filter(n => 
+      (((n.targetRole === 'tenant' && (n.targetId === activeTenant.id || n.targetId === activeTenant.name)) || n.targetRole === 'all') &&
+      n.type !== 'system')
+    )
+    .sort((a, b) => b.id.localeCompare(a.id));
   
   const unreadCount = tenantNotifications.filter(n => !n.isRead).length;
 
@@ -193,45 +197,70 @@ export default function TenantDashboard({
                 </span>
               )}
             </h3>
-            {unreadCount > 0 && (
-              <button 
-                onClick={() => {
-                  tenantNotifications.forEach(n => onMarkNotificationRead(n.id));
-                }}
-                className="text-xs text-amber-400 hover:text-amber-300 font-bold cursor-pointer"
-              >
-                تحديد الكل كمقروء
-              </button>
-            )}
+            <div className="flex items-center gap-3">
+              {unreadCount > 0 && (
+                <button 
+                  onClick={() => {
+                    tenantNotifications.forEach(n => onMarkNotificationRead(n.id));
+                  }}
+                  className="text-xs text-amber-400 hover:text-amber-300 font-bold cursor-pointer"
+                >
+                  تحديد الكل كمقروء
+                </button>
+              )}
+              {tenantNotifications.length > 0 && onClearNotifications && (
+                <button 
+                  onClick={onClearNotifications}
+                  className="text-xs text-slate-400 hover:text-red-400 font-bold cursor-pointer"
+                >
+                  مسح التنبيهات
+                </button>
+              )}
+            </div>
           </div>
 
-          <div className="divide-y divide-slate-800 max-h-[190px] overflow-y-auto pr-2">
+          <div className="divide-y divide-slate-800/80 max-h-[350px] overflow-y-auto pr-2 space-y-2">
             {tenantNotifications.length === 0 ? (
-              <div className="text-center py-10 text-slate-500 text-xs">
-                لا توجد إشعارات أو تذكيرات قضائية في ملفك حالياً.
-              </div>
+              <p className="text-xs text-slate-500 py-8 text-center">لا توجد إشعارات قضائية أو تنبيهات واردة حالياً.</p>
             ) : (
               tenantNotifications.map(notif => (
                 <div 
                   key={notif.id} 
                   onClick={() => !notif.isRead && onMarkNotificationRead(notif.id)}
-                  className={`py-3 flex items-start justify-between gap-3 cursor-pointer group transition-all rounded-lg px-2 hover:bg-slate-950/40 ${
-                    !notif.isRead ? 'bg-amber-500/5 border-r-2 border-amber-500 pl-1' : ''
+                  className={`py-3.5 flex flex-col gap-2 cursor-pointer group transition-all rounded-xl px-3 hover:bg-slate-950/50 ${
+                    !notif.isRead ? 'bg-amber-500/5 border-r-2 border-amber-500 pl-1.5 shadow-sm' : 'bg-slate-900/30'
                   }`}
                 >
-                  <div className="flex gap-2.5">
-                    <span className={`w-2 h-2 rounded-full mt-2 shrink-0 ${!notif.isRead ? 'bg-red-500' : 'bg-transparent'}`} />
-                    <div>
-                      <h4 className="font-extrabold text-xs text-slate-200 group-hover:text-amber-400 transition-colors">{notif.title}</h4>
-                      <p className="text-xs text-slate-400 mt-1 leading-relaxed">{notif.message}</p>
-                      <span className="text-[10px] text-slate-500 block mt-1.5">{notif.timestamp}</span>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <span className={`w-2 h-2 rounded-full shrink-0 ${!notif.isRead ? 'bg-red-500 animate-pulse' : 'bg-transparent'}`} />
+                      <span className={`text-[9px] font-black px-2 py-0.5 rounded-md ${
+                        notif.type === 'session' 
+                          ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' 
+                          : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                      }`}>
+                        {notif.type === 'session' ? 'جلسة قضائية' : 'مطالبة وسداد'}
+                      </span>
                     </div>
+                    <span className="text-[10px] text-slate-500 font-mono">{notif.timestamp}</span>
                   </div>
-                  {!notif.isRead && (
-                    <button className="text-[10px] bg-slate-850 hover:bg-slate-800 text-slate-300 hover:text-white px-2.5 py-1 rounded-md shrink-0 border border-slate-800 transition-colors">
-                      قراءة التنبيه
-                    </button>
-                  )}
+
+                  <div>
+                    <h4 className="font-extrabold text-xs text-slate-200 group-hover:text-amber-400 transition-colors leading-snug">{notif.title}</h4>
+                    <p className="text-xs text-slate-400 mt-1 leading-relaxed">{notif.message}</p>
+                  </div>
+
+                  <div className="flex items-center justify-between border-t border-slate-800/40 pt-2 mt-1">
+                    <span className="text-[10px] text-slate-500">المرسل: {notif.sender || 'إدارة منصة أصال'}</span>
+                    {!notif.isRead ? (
+                      <span className="text-[9px] font-bold text-amber-400 flex items-center gap-1">
+                        <span className="w-1 h-1 bg-amber-400 rounded-full inline-block"></span>
+                        غير مقروء
+                      </span>
+                    ) : (
+                      <span className="text-[9px] text-slate-500">تمت القراءة</span>
+                    )}
+                  </div>
                 </div>
               ))
             )}
@@ -297,7 +326,9 @@ export default function TenantDashboard({
                       <div className="flex items-center gap-2.5">
                         <Clock className="w-5 h-5 text-amber-400 shrink-0" />
                         <div>
-                          <span className="font-extrabold block text-amber-200">{session.day} - {session.date}</span>
+                          <span className="font-extrabold block text-amber-200">
+                            {session.day} - {session.hijriDate || session.date}
+                          </span>
                           <span className="text-[10px] text-slate-500 block mt-0.5">التوقيت المعتمد للدخول في المنصة القضائية</span>
                         </div>
                         <span className="text-xs text-slate-950 font-black bg-amber-400 px-2.5 py-1 rounded-lg mr-auto">
@@ -308,10 +339,25 @@ export default function TenantDashboard({
                       <div className="flex items-start gap-2.5 pt-2.5 border-t border-slate-800">
                         <MapPin className="w-4.5 h-4.5 text-slate-500 shrink-0 mt-0.5" />
                         <div>
-                          <span className="font-semibold block text-slate-200">{session.courtRoom}</span>
+                          <span className="font-semibold block text-slate-200">
+                            {session.courtRoom}
+                            {(session.city || session.circuitNo) && (
+                              <span className="font-normal text-slate-400 text-[11px] block mt-1">
+                                {session.city && `📍 المدينة: ${session.city}`} {session.circuitNo && ` | الدائرة: ${session.circuitNo}`}
+                              </span>
+                            )}
+                          </span>
                           <span className="text-[10px] text-slate-500 block mt-0.5">موقع ومقر الدائرة والمنصة الإلكترونية للترافع</span>
                         </div>
                       </div>
+
+                      {session.agencyNo && (
+                        <div className="mt-2 pt-2.5 border-t border-slate-800/80 text-[11px] text-emerald-400 flex flex-col gap-0.5">
+                          <span className="font-bold flex items-center gap-1">🔑 تفاصيل وكالتك المعتمدة بالترافع:</span>
+                          <span className="text-slate-300">رقم الوكالة: {session.agencyNo}</span>
+                          {session.agencyExpiryDate && <span className="text-slate-400">تاريخ انتهاء الوكالة: {session.agencyExpiryDate}</span>}
+                        </div>
+                      )}
                     </div>
 
                     {/* Parties In Dispute */}
@@ -335,8 +381,11 @@ export default function TenantDashboard({
                         <div className="flex items-center gap-2">
                           <div className="w-8 h-8 bg-amber-500/15 text-amber-400 rounded-full flex items-center justify-center text-xs border border-amber-500/20">⚖️</div>
                           <div>
-                            <span className="font-bold text-xs text-slate-200 block">{lawyer.name}</span>
-                            <span className="text-[10px] text-slate-400 block">{lawyer.specialty}</span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0"></span>
+                              <span className="font-bold text-xs text-slate-200 block">{lawyer.name}</span>
+                            </div>
+                            <span className="text-[10px] text-slate-400 block mt-0.5">{lawyer.specialty} | <span className="text-emerald-400 font-bold text-[9px]">متصل حالياً بالجلسة</span></span>
                           </div>
                         </div>
                         <a 

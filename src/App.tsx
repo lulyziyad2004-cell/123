@@ -12,6 +12,9 @@ import {
   DEMO_INVOICES,
   DEMO_NOTIFICATIONS
 } from './data';
+import { collection, doc, setDoc, deleteDoc, getDocs, onSnapshot, getDoc } from 'firebase/firestore';
+import { db, auth, handleFirestoreError, OperationType, onDatabaseError } from './firebase';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
 import AdminDashboard from './components/AdminDashboard';
 import LawyerDashboard from './components/LawyerDashboard';
 import TenantDashboard from './components/TenantDashboard';
@@ -42,9 +45,9 @@ export default function App() {
       const cleanTitle = (s.caseTitle || '').replace(/\s+/g, '');
       const cleanPlaintiff = (s.plaintiff || '').replace(/\s+/g, '');
       const cleanDefendant = (s.defendant || '').replace(/\s+/g, '');
-      if (cleanTitle.includes('محمداحمد') || cleanTitle.includes('محمدأحمد')) return false;
-      if (cleanPlaintiff.includes('محمداحمد') || cleanPlaintiff.includes('محمدأحمد')) return false;
-      if (cleanDefendant.includes('محمداحمد') || cleanDefendant.includes('محمدأحمد')) return false;
+      if (cleanTitle.includes('محمداحمد') || cleanTitle.includes('محمدأحمد') || cleanTitle.includes('عمر') || cleanTitle.includes('عخم') || cleanTitle.toLowerCase().includes('omar') || cleanTitle.toLowerCase().includes('akhm') || cleanTitle.toLowerCase().includes('ekhm')) return false;
+      if (cleanPlaintiff.includes('محمداحمد') || cleanPlaintiff.includes('محمدأحمد') || cleanPlaintiff.includes('عمر') || cleanPlaintiff.includes('عخم') || cleanPlaintiff.toLowerCase().includes('omar') || cleanPlaintiff.toLowerCase().includes('akhm') || cleanPlaintiff.toLowerCase().includes('ekhm')) return false;
+      if (cleanDefendant.includes('محمداحمد') || cleanDefendant.includes('محمدأحمد') || cleanDefendant.includes('عمر') || cleanDefendant.includes('عخم') || cleanDefendant.toLowerCase().includes('omar') || cleanDefendant.toLowerCase().includes('akhm') || cleanDefendant.toLowerCase().includes('ekhm')) return false;
       return true;
     });
   });
@@ -55,15 +58,28 @@ export default function App() {
     return parsed.filter((i: any) => {
       if (i.id === 'INV-4011' || i.tenantId === 'T1' || i.tenantId === 'T2') return false;
       const cleanName = (i.tenantName || '').replace(/\s+/g, '');
-      if (cleanName.includes('محمداحمد') || cleanName.includes('محمدأحمد')) return false;
+      if (cleanName.includes('محمداحمد') || cleanName.includes('محمدأحمد') || cleanName.includes('عمر') || cleanName.includes('عخم') || cleanName.toLowerCase().includes('omar') || cleanName.toLowerCase().includes('akhm') || cleanName.toLowerCase().includes('ekhm')) return false;
       return true;
     });
   });
 
   const [notifications, setNotifications] = useState<Notification[]>(() => {
     const saved = localStorage.getItem('nazaha_notifications');
-    const parsed = saved ? JSON.parse(saved) : [];
-    return parsed.filter((n: any) => n.id !== 'N1');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return parsed.filter((n: any) => {
+          const cleanTitle = (n.title || '').replace(/\s+/g, '');
+          const cleanMsg = (n.message || '').replace(/\s+/g, '');
+          if (cleanTitle.includes('محمداحمد') || cleanTitle.includes('محمدأحمد') || cleanTitle.includes('عمر') || cleanTitle.includes('عخم') || cleanTitle.toLowerCase().includes('omar') || cleanTitle.toLowerCase().includes('akhm') || cleanTitle.toLowerCase().includes('ekhm')) return false;
+          if (cleanMsg.includes('محمداحمد') || cleanMsg.includes('محمدأحمد') || cleanMsg.includes('عمر') || cleanMsg.includes('عخم') || cleanMsg.toLowerCase().includes('omar') || cleanMsg.toLowerCase().includes('akhm') || cleanMsg.toLowerCase().includes('ekhm')) return false;
+          return true;
+        });
+      } catch (e) {
+        return DEMO_NOTIFICATIONS;
+      }
+    }
+    return DEMO_NOTIFICATIONS;
   });
 
   const [lawyers, setLawyers] = useState<Lawyer[]>(() => {
@@ -72,7 +88,7 @@ export default function App() {
     return parsed.filter((l: any) => {
       if (l.id === 'L1' || l.id === 'L2') return false;
       const cleanName = (l.name || '').replace(/\s+/g, '');
-      if (cleanName.includes('محمداحمد') || cleanName.includes('محمدأحمد')) return false;
+      if (cleanName.includes('محمداحمد') || cleanName.includes('محمدأحمد') || cleanName.includes('عمر') || cleanName.includes('عخم') || cleanName.toLowerCase().includes('omar') || cleanName.toLowerCase().includes('akhm') || cleanName.toLowerCase().includes('ekhm')) return false;
       return true;
     });
   });
@@ -83,7 +99,7 @@ export default function App() {
     return parsed.filter((t: any) => {
       if (t.id === 'T1' || t.id === 'T2') return false;
       const cleanName = (t.name || '').replace(/\s+/g, '');
-      if (cleanName.includes('محمداحمد') || cleanName.includes('محمدأحمد')) return false;
+      if (cleanName.includes('محمداحمد') || cleanName.includes('محمدأحمد') || cleanName.includes('عمر') || cleanName.includes('عخم') || cleanName.toLowerCase().includes('omar') || cleanName.toLowerCase().includes('akhm') || cleanName.toLowerCase().includes('ekhm')) return false;
       return true;
     });
   });
@@ -91,7 +107,14 @@ export default function App() {
   // Logged-in user session state
   const [userSession, setUserSession] = useState<UserSession | null>(() => {
     const saved = localStorage.getItem('asal_session');
-    return saved ? JSON.parse(saved) : null;
+    const parsed = saved ? JSON.parse(saved) : null;
+    if (parsed) {
+      const cleanName = (parsed.name || '').replace(/\s+/g, '');
+      if (cleanName.includes('محمداحمد') || cleanName.includes('محمدأحمد') || cleanName.includes('عمر') || cleanName.includes('عخم') || cleanName.toLowerCase().includes('omar') || cleanName.toLowerCase().includes('akhm') || cleanName.toLowerCase().includes('ekhm')) {
+        return null;
+      }
+    }
+    return parsed;
   });
 
   // Active role state for backward compatibility/simulators
@@ -109,6 +132,185 @@ export default function App() {
 
   // Sound effects status (simulated/visual cue)
   const [soundEnabled, setSoundEnabled] = useState(true);
+
+  // Database Connection / Configuration Error State
+  const [dbError, setDbError] = useState<string | null>(null);
+
+  useEffect(() => {
+    onDatabaseError((err, path, operation) => {
+      console.warn(`Captured database error for path [${path}] during [${operation}]:`, err);
+      setDbError(err);
+    });
+  }, []);
+
+  // Listen to Firestore data in real-time with instant synchronization
+  useEffect(() => {
+    // 1. Listen to Lawyers
+    const unsubLawyers = onSnapshot(collection(db, 'lawyers'), (snapshot) => {
+      const list: Lawyer[] = [];
+      snapshot.forEach((docSnap) => {
+        list.push(docSnap.data() as Lawyer);
+      });
+      if (list.length > 0) {
+        setLawyers(list);
+      }
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'lawyers');
+    });
+
+    // 2. Listen to Tenants
+    const unsubTenants = onSnapshot(collection(db, 'tenants'), (snapshot) => {
+      const list: Tenant[] = [];
+      snapshot.forEach((docSnap) => {
+        list.push(docSnap.data() as Tenant);
+      });
+      if (list.length > 0) {
+        setTenants(list);
+      }
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'tenants');
+    });
+
+    // 3. Listen to Sessions (Cases & court dates)
+    const unsubSessions = onSnapshot(collection(db, 'sessions'), (snapshot) => {
+      const list: Session[] = [];
+      snapshot.forEach((docSnap) => {
+        list.push(docSnap.data() as Session);
+      });
+      setSessions(list.sort((a, b) => b.id.localeCompare(a.id)));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'sessions');
+    });
+
+    // 4. Listen to Invoices (Payments)
+    const unsubInvoices = onSnapshot(collection(db, 'invoices'), (snapshot) => {
+      const list: Invoice[] = [];
+      snapshot.forEach((docSnap) => {
+        list.push(docSnap.data() as Invoice);
+      });
+      setInvoices(list.sort((a, b) => b.id.localeCompare(a.id)));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'invoices');
+    });
+
+    // 5. Listen to Notifications
+    const unsubNotifications = onSnapshot(collection(db, 'notifications'), (snapshot) => {
+      const list: Notification[] = [];
+      snapshot.forEach((docSnap) => {
+        list.push(docSnap.data() as Notification);
+      });
+      setNotifications(list.sort((a, b) => b.id.localeCompare(a.id)));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'notifications');
+    });
+
+    return () => {
+      unsubLawyers();
+      unsubTenants();
+      unsubSessions();
+      unsubInvoices();
+      unsubNotifications();
+    };
+  }, []);
+
+  // Listen to Firebase Authentication State and load appropriate user profile
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        const email = firebaseUser.email || '';
+        const emailLower = email.toLowerCase();
+
+        // 1. Check Admin Account Override
+        if (emailLower === 'admin@asal.com') {
+          const adminSession: UserSession = {
+            id: firebaseUser.uid,
+            name: 'إدارة أصال للنظم القانونية',
+            email: emailLower,
+            phone: '0500000000',
+            role: 'admin'
+          };
+          setUserSession(adminSession);
+          setCurrentRole('admin');
+          localStorage.setItem('asal_session', JSON.stringify(adminSession));
+          return;
+        }
+
+        // 2. Check Lawyer Profile inside Firestore
+        try {
+          const lawyerDoc = await getDoc(doc(db, 'lawyers', firebaseUser.uid));
+          if (lawyerDoc.exists()) {
+            const data = lawyerDoc.data() as Lawyer;
+            const lawyerSession: UserSession = {
+              id: data.id,
+              name: data.name,
+              email: data.email,
+              phone: data.phone,
+              role: 'lawyer'
+            };
+            setUserSession(lawyerSession);
+            setCurrentRole('lawyer');
+            localStorage.setItem('asal_session', JSON.stringify(lawyerSession));
+            return;
+          }
+        } catch (e) {
+          console.warn("Error loading lawyer profile:", e);
+          const errStr = e instanceof Error ? e.message : String(e);
+          if (errStr.includes("offline") || errStr.includes("permission")) {
+            setDbError(errStr);
+          }
+        }
+
+        // 3. Check Tenant (Client) Profile inside Firestore
+        try {
+          const tenantDoc = await getDoc(doc(db, 'tenants', firebaseUser.uid));
+          if (tenantDoc.exists()) {
+            const data = tenantDoc.data() as Tenant;
+            const tenantSession: UserSession = {
+              id: data.id,
+              name: data.name,
+              email: data.email,
+              phone: data.phone,
+              role: 'tenant'
+            };
+            setUserSession(tenantSession);
+            setCurrentRole('tenant');
+            localStorage.setItem('asal_session', JSON.stringify(tenantSession));
+            return;
+          }
+        } catch (e) {
+          console.warn("Error loading tenant profile:", e);
+          const errStr = e instanceof Error ? e.message : String(e);
+          if (errStr.includes("offline") || errStr.includes("permission")) {
+            setDbError(errStr);
+          }
+        }
+
+        // Fallback to locally stored session if DB query fails or delayed
+        const localSess = localStorage.getItem('asal_session');
+        if (localSess) {
+          setUserSession(JSON.parse(localSess));
+        }
+      } else {
+        // If there's no active Firebase user, check if we have an active admin fallback session
+        const localSess = localStorage.getItem('asal_session');
+        if (localSess) {
+          const parsed = JSON.parse(localSess);
+          if (parsed && parsed.email === 'admin@asal.com') {
+            // Keep the admin session active!
+            setUserSession(parsed);
+            setCurrentRole('admin');
+            return;
+          }
+        }
+        setUserSession(null);
+        localStorage.removeItem('asal_session');
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+
 
   // Save states to local storage on changes
   useEffect(() => {
@@ -146,11 +348,29 @@ export default function App() {
       id: `L-${Date.now().toString().slice(-4)}`
     };
     setLawyers(prev => [...prev, newLawyer]);
+    
+    // Sync to Firestore
+    try {
+      setDoc(doc(db, 'lawyers', newLawyer.id), newLawyer);
+    } catch (e) {
+      handleFirestoreError(e, OperationType.WRITE, `lawyers/${newLawyer.id}`);
+    }
+
+    // Send automated welcome email and SMS to the lawyer
+    const welcomeMsg = `أهلاً بك المستشار القانوني ${newLawyer.name} في منصة أصال للمحاماة والاستشارات القانونية. تم إنشاء حسابك بنجاح بصفة مستشار ومحامي معتمد. نسعد بانضمامك إلينا ونتمنى لك مسيرة قانونية متميزة.`;
+    sendRealNotification(newLawyer.email, newLawyer.phone, 'تم إنشاء حسابك بنجاح في منصة أصال ⚖️', welcomeMsg);
   };
 
   // Handle deleting a lawyer
   const handleDeleteLawyer = (id: string) => {
     setLawyers(prev => prev.filter(l => l.id !== id));
+    
+    // Sync to Firestore
+    try {
+      deleteDoc(doc(db, 'lawyers', id));
+    } catch (e) {
+      handleFirestoreError(e, OperationType.DELETE, `lawyers/${id}`);
+    }
   };
 
   // Handle adding a tenant
@@ -160,11 +380,29 @@ export default function App() {
       id: `T-${Date.now().toString().slice(-4)}`
     };
     setTenants(prev => [...prev, newTenant]);
+
+    // Sync to Firestore
+    try {
+      setDoc(doc(db, 'tenants', newTenant.id), newTenant);
+    } catch (e) {
+      handleFirestoreError(e, OperationType.WRITE, `tenants/${newTenant.id}`);
+    }
+
+    // Send automated welcome email and SMS to the tenant
+    const welcomeMsg = `أهلاً بك يا ${newTenant.name} في منصة أصال للمحاماة والاستشارات القانونية. تم إنشاء حسابك بنجاح بصفة عميل موكل. نسعد بخدمتك وتقديم الدعم القضائي المتميز لحماية حقوقكم.`;
+    sendRealNotification(newTenant.email, newTenant.phone, 'تم إنشاء حسابك بنجاح في منصة أصال ⚖️', welcomeMsg);
   };
 
   // Handle deleting a tenant
   const handleDeleteTenant = (id: string) => {
     setTenants(prev => prev.filter(t => t.id !== id));
+
+    // Sync to Firestore
+    try {
+      deleteDoc(doc(db, 'tenants', id));
+    } catch (e) {
+      handleFirestoreError(e, OperationType.DELETE, `tenants/${id}`);
+    }
   };
 
   // Load complete pre-configured Demo Data
@@ -174,15 +412,62 @@ export default function App() {
     setSessions(DEMO_SESSIONS);
     setInvoices(DEMO_INVOICES);
     setNotifications(DEMO_NOTIFICATIONS);
+
+    // Sync all demo data to Firestore
+    DEMO_LAWYERS.forEach(l => setDoc(doc(db, 'lawyers', l.id), l).catch(() => {}));
+    DEMO_TENANTS.forEach(t => setDoc(doc(db, 'tenants', t.id), t).catch(() => {}));
+    DEMO_SESSIONS.forEach(s => setDoc(doc(db, 'sessions', s.id), s).catch(() => {}));
+    DEMO_INVOICES.forEach(i => setDoc(doc(db, 'invoices', i.id), i).catch(() => {}));
+    DEMO_NOTIFICATIONS.forEach(n => setDoc(doc(db, 'notifications', n.id), n).catch(() => {}));
   };
 
   // Handle adding a session
-  const handleAddSession = (newSessionData: Omit<Session, 'id'>) => {
+  const handleAddSession = (newSessionData: Omit<Session, 'id'>, channels: { email: boolean; sms: boolean } = { email: true, sms: true }) => {
     const newSession: Session = {
       ...newSessionData,
       id: `S-${Date.now().toString().slice(-4)}`
     };
     setSessions(prev => [newSession, ...prev]);
+
+    // Sync to Firestore
+    try {
+      setDoc(doc(db, 'sessions', newSession.id), newSession);
+    } catch (e) {
+      handleFirestoreError(e, OperationType.WRITE, `sessions/${newSession.id}`);
+    }
+
+    // Lookup tenant and lawyer to send custom notifications with emails/SMS
+    const tenant = tenants.find(t => t.id === newSession.tenantId);
+    const lawyer = lawyers.find(l => l.id === newSession.lawyerId);
+
+    const tenantName = tenant ? tenant.name : 'العميل';
+    const lawyerName = lawyer ? lawyer.name : 'المستشار';
+
+    // 1. Send email and SMS notification to the tenant (client)
+    handleTriggerNotification(
+      'tenant',
+      newSession.tenantId,
+      'تأكيد جدولة جلسة قضائية جديدة ⚖️',
+      `أهلاً بك يا ${tenantName}، تم جدولة جلسة مرافعة جديدة لك في قضية "${newSession.caseTitle}" بخصوص ${newSession.plaintiff} ضد ${newSession.defendant}. الموعد: يوم ${newSession.day} الموافق ${newSession.date} الساعة ${newSession.time} في القاعة/الدائرة: ${newSession.courtRoom}. مع تمنياتنا بالتوفيق.`,
+      'session',
+      undefined,
+      undefined,
+      undefined,
+      channels
+    );
+
+    // 2. Send email and SMS notification to the lawyer (counsel)
+    handleTriggerNotification(
+      'lawyer',
+      newSession.lawyerId,
+      'تكليف بجلسة قضائية جديدة ⚖️',
+      `سعادة المستشار ${lawyerName}، تم تكليفكم بجلسة قضائية جديدة لقضية "${newSession.caseTitle}" للعميل ${tenantName}. الموعد: يوم ${newSession.day} الموافق ${newSession.date} الساعة ${newSession.time} في القاعة/الدائرة: ${newSession.courtRoom}. يرجى التحضير للمرافعة الموفقة.`,
+      'session',
+      undefined,
+      undefined,
+      undefined,
+      channels
+    );
   };
 
   // Handle updating session status
@@ -201,7 +486,13 @@ export default function App() {
           'session'
         );
 
-        return { ...s, status };
+        const updated = { ...s, status };
+        // Sync to Firestore
+        setDoc(doc(db, 'sessions', id), updated).catch((e) => {
+          handleFirestoreError(e, OperationType.WRITE, `sessions/${id}`);
+        });
+
+        return updated;
       }
       return s;
     }));
@@ -210,6 +501,13 @@ export default function App() {
   // Handle deleting a session
   const handleDeleteSession = (id: string) => {
     setSessions(prev => prev.filter(s => s.id !== id));
+
+    // Sync to Firestore
+    try {
+      deleteDoc(doc(db, 'sessions', id));
+    } catch (e) {
+      handleFirestoreError(e, OperationType.DELETE, `sessions/${id}`);
+    }
   };
 
   // Handle adding an invoice
@@ -219,13 +517,26 @@ export default function App() {
       id: `INV-${Date.now().toString().slice(-4)}`
     };
     setInvoices(prev => [newInvoice, ...prev]);
+
+    // Sync to Firestore
+    try {
+      setDoc(doc(db, 'invoices', newInvoice.id), newInvoice);
+    } catch (e) {
+      handleFirestoreError(e, OperationType.WRITE, `invoices/${newInvoice.id}`);
+    }
   };
 
   // Handle updating invoice status
   const handleUpdateInvoiceStatus = (id: string, status: Invoice['status']) => {
     setInvoices(prev => prev.map(inv => {
       if (inv.id === id) {
-        return { ...inv, status };
+        const updated = { ...inv, status };
+        // Sync to Firestore
+        setDoc(doc(db, 'invoices', id), updated).catch((e) => {
+          handleFirestoreError(e, OperationType.WRITE, `invoices/${id}`);
+        });
+
+        return updated;
       }
       return inv;
     }));
@@ -234,61 +545,191 @@ export default function App() {
   // Handle deleting an invoice
   const handleDeleteInvoice = (id: string) => {
     setInvoices(prev => prev.filter(i => i.id !== id));
+
+    // Sync to Firestore
+    try {
+      deleteDoc(doc(db, 'invoices', id));
+    } catch (e) {
+      handleFirestoreError(e, OperationType.DELETE, `invoices/${id}`);
+    }
   };
 
-  // Handle triggering a new notification (Simulating push/real-time)
+  // Dispatch real-world SMS & Email notifications to the backend
+  const sendRealNotification = async (recipientEmail: string, recipientPhone: string, title: string, message: string) => {
+    if (recipientPhone) {
+      try {
+        const smsRes = await fetch("/api/send-sms", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ to: recipientPhone, message: `${title}\n${message}` })
+        });
+        const smsData = await smsRes.json();
+        console.log("SMS dispatch response:", smsData);
+        if (smsData.success) {
+          // If a real SMS was successfully triggered or simulated with warning
+          if (smsData.simulated) {
+            console.info("Twilio SMS simulated:", smsData.message);
+          } else {
+            console.info("Real Twilio SMS sent successfully.");
+          }
+        }
+      } catch (e) {
+        console.error("Failed to fetch /api/send-sms:", e);
+      }
+    }
+
+    if (recipientEmail) {
+      try {
+        const emailRes = await fetch("/api/send-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ to: recipientEmail, title, message })
+        });
+        const emailData = await emailRes.json();
+        console.log("Email dispatch response:", emailData);
+        if (emailData.success) {
+          if (emailData.simulated) {
+            console.info("Resend email simulated:", emailData.message);
+          } else {
+            console.info("Real Resend email sent successfully.");
+          }
+        }
+      } catch (e) {
+        console.error("Failed to fetch /api/send-email:", e);
+      }
+    }
+  };
+
+  // Handle triggering a new notification (Pure secure dispatch directly to the user's mobile device / email & stores in-app)
   const handleTriggerNotification = (
-    targetRole: 'lawyer' | 'tenant' | 'all',
+    targetRole: 'lawyer' | 'tenant' | 'all' | 'custom',
     targetId: string,
     title: string,
     message: string,
-    type: 'session' | 'invoice' | 'system'
+    type: 'session' | 'invoice' | 'system',
+    overrideEmail?: string,
+    overridePhone?: string,
+    senderName?: string,
+    channels: { email: boolean; sms: boolean } = { email: true, sms: true }
   ) => {
-    const formattedTime = new Date().toLocaleTimeString('ar-SA', { hour: 'numeric', minute: '2-digit' }) + ' ' + new Date().toLocaleDateString('ar-SA', { month: 'short', day: 'numeric' });
-    
+    // Resolve target phone and email for real-world SMS/Email dispatching
+    let recipientPhone = overridePhone || '';
+    let recipientEmail = overrideEmail || '';
+
+    if (!recipientPhone && !recipientEmail) {
+      if (targetRole === 'tenant') {
+        const t = tenants.find(item => item.id === targetId || item.name === targetId);
+        if (t) {
+          recipientPhone = t.phone || '';
+          recipientEmail = t.email || '';
+        }
+      } else if (targetRole === 'lawyer') {
+        const l = lawyers.find(item => item.id === targetId || item.name === targetId);
+        if (l) {
+          recipientPhone = l.phone || '';
+          recipientEmail = l.email || '';
+        }
+      } else if (targetRole === 'all') {
+        if (!targetId) {
+          // Broadcast to all tenants and lawyers
+          tenants.forEach(t => {
+            if (t.phone || t.email) {
+              sendRealNotification(
+                channels.email ? (t.email || '') : '',
+                channels.sms ? (t.phone || '') : '',
+                title,
+                message
+              );
+            }
+          });
+          lawyers.forEach(l => {
+            if (l.phone || l.email) {
+              sendRealNotification(
+                channels.email ? (l.email || '') : '',
+                channels.sms ? (l.phone || '') : '',
+                title,
+                message
+              );
+            }
+          });
+        } else {
+          const t = tenants.find(item => item.id === targetId || item.name === targetId);
+          const l = lawyers.find(item => item.id === targetId || item.name === targetId);
+          if (t) {
+            recipientPhone = t.phone || '';
+            recipientEmail = t.email || '';
+          } else if (l) {
+            recipientPhone = l.phone || '';
+            recipientEmail = l.email || '';
+          }
+        }
+      }
+    }
+
+    // Direct secure dispatch to the mobile phone (SMS) or email
+    if (recipientPhone || recipientEmail) {
+      sendRealNotification(
+        channels.email ? recipientEmail : '',
+        channels.sms ? recipientPhone : '',
+        title,
+        message
+      );
+    }
+
+    // Create a robust notification object for in-app display and save in state
     const newNotif: Notification = {
-      id: `N-${Date.now()}`,
+      id: `N-${Date.now().toString().slice(-4)}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
       targetRole,
       targetId,
       title,
       message,
-      timestamp: formattedTime,
+      timestamp: new Date().toLocaleDateString('ar-SA', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      }),
       isRead: false,
-      type
+      type,
+      sender: senderName || (userSession ? userSession.name : 'إدارة منصة أصال')
     };
 
     setNotifications(prev => [newNotif, ...prev]);
 
-    // Show visual real-time Toast Alert to the simulated user
-    setActiveToast({
-      id: newNotif.id,
-      title,
-      message,
-      type
-    });
-
-    // Audio beep effect simulation (using simple standard synthetic Beep if supported)
-    if (soundEnabled && typeof window !== 'undefined' && 'AudioContext' in window) {
-      try {
-        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-        const oscillator = audioCtx.createOscillator();
-        const gainNode = audioCtx.createGain();
-        oscillator.connect(gainNode);
-        gainNode.connect(audioCtx.destination);
-        oscillator.type = 'sine';
-        oscillator.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5 note (friendly chime)
-        gainNode.gain.setValueAtTime(0.08, audioCtx.currentTime);
-        oscillator.start();
-        oscillator.stop(audioCtx.currentTime + 0.15);
-      } catch (err) {
-        // Safe fail if blocked by browser autoplay rules
-      }
+    // Sync to Firestore
+    try {
+      setDoc(doc(db, 'notifications', newNotif.id), newNotif);
+    } catch (e) {
+      handleFirestoreError(e, OperationType.WRITE, `notifications/${newNotif.id}`);
     }
   };
 
   // Clear or mark notification as read
   const handleMarkNotificationRead = (id: string) => {
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
+    setNotifications(prev => prev.map(n => {
+      if (n.id === id) {
+        const updated = { ...n, isRead: true };
+        // Sync to Firestore
+        setDoc(doc(db, 'notifications', id), updated).catch((e) => {
+          handleFirestoreError(e, OperationType.WRITE, `notifications/${id}`);
+        });
+        return updated;
+      }
+      return n;
+    }));
+  };
+
+  const handleClearNotifications = () => {
+    const backupNotifs = [...notifications];
+    setNotifications([]);
+    localStorage.removeItem('nazaha_notifications');
+
+    // Sync to Firestore by deleting docs
+    backupNotifs.forEach(n => {
+      deleteDoc(doc(db, 'notifications', n.id)).catch(() => {});
+    });
   };
 
   // Reset entire application database to initial seeds
@@ -297,18 +738,61 @@ export default function App() {
       setSessions([]);
       setInvoices([]);
       setNotifications([]);
-      setLawyers([]);
-      setTenants([]);
-      setUserSession(null);
-      setCurrentRole('tenant');
       
+      if (userSession) {
+        if (userSession.role === 'lawyer') {
+          // Keep the current lawyer in the lawyers list, clear all other lawyers and tenants
+          const currentLawyer = lawyers.find(l => l.id === userSession.id);
+          if (currentLawyer) {
+            setLawyers([currentLawyer]);
+          } else {
+            const reconstructed: Lawyer = {
+              id: userSession.id,
+              name: userSession.name,
+              specialty: 'مستشار قانوني معتمد',
+              email: userSession.email || '',
+              phone: userSession.phone || '',
+              password: '123'
+            };
+            setLawyers([reconstructed]);
+          }
+          setTenants([]);
+        } else if (userSession.role === 'tenant') {
+          const currentTenant = tenants.find(t => t.id === userSession.id);
+          if (currentTenant) {
+            setTenants([currentTenant]);
+          } else {
+            const reconstructed: Tenant = {
+              id: userSession.id,
+              name: userSession.name,
+              propertyNo: 'ملف الموكل',
+              email: userSession.email || '',
+              phone: userSession.phone || '',
+              password: '123'
+            };
+            setTenants([reconstructed]);
+          }
+          setLawyers([]);
+        } else {
+          // Admin logged in - admin credentials are hardcoded, so we can clear all lawyers and tenants safely
+          setLawyers([]);
+          setTenants([]);
+        }
+        // Do NOT set userSession to null, keep the current user logged in!
+      } else {
+        // No active session, clear everything
+        setLawyers([]);
+        setTenants([]);
+        setUserSession(null);
+        setCurrentRole('tenant');
+      }
+
       localStorage.removeItem('nazaha_sessions');
       localStorage.removeItem('nazaha_invoices');
       localStorage.removeItem('nazaha_notifications');
       localStorage.removeItem('asal_lawyers');
       localStorage.removeItem('asal_tenants');
-      localStorage.removeItem('asal_session');
-      alert('تم مسح وتفريغ كافة البيانات بنجاح! يمكنك الآن البدء بتسجيل وتعبئة بياناتك من الصفر.');
+      alert('تم مسح وتفريغ كافة البيانات بنجاح! تم الحفاظ على تسجيل دخولك لتتمكن من ملء بياناتك الجديدة مباشرة من الصفر.');
     }
   };
 
@@ -348,15 +832,25 @@ export default function App() {
               <div className="flex items-center gap-3 border-l border-slate-800 pl-4">
                 <div className="hidden md:flex flex-col text-right items-end">
                   <span className="text-xs font-bold text-slate-100">{userSession.name}</span>
-                  <span className="text-[9px] text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded-full mt-0.5">
-                    {userSession.role === 'admin' ? 'مدير المنصة' : userSession.role === 'lawyer' ? 'مستشار ومحامي' : 'عميل موكل'}
-                  </span>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className="text-[9px] text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded-full">
+                      {userSession.role === 'admin' ? 'مدير المنصة' : userSession.role === 'lawyer' ? 'مستشار ومحامي' : 'عميل موكل'}
+                    </span>
+                    <span className="text-[9px] text-slate-400 font-bold bg-slate-500/10 px-2 py-0.5 rounded-full border border-slate-500/10">
+                      📧 {userSession.email}
+                    </span>
+                  </div>
                 </div>
                 <button
-                  onClick={() => {
+                  onClick={async () => {
+                    try {
+                      await signOut(auth);
+                    } catch (e) {
+                      console.error("Firebase signOut error:", e);
+                    }
                     setUserSession(null);
-                    // Also clear role state
                     setCurrentRole('tenant');
+                    localStorage.removeItem('asal_session');
                   }}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-red-400 hover:text-white hover:bg-red-600 border border-red-500/20 rounded-xl transition-all cursor-pointer"
                   title="تسجيل الخروج الآمن من الحساب"
@@ -387,6 +881,53 @@ export default function App() {
         </div>
       </header>
 
+      {dbError && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4 animate-fade-in">
+          <div className="bg-slate-900 border border-amber-500/30 rounded-2xl p-5 shadow-lg relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-1.5 h-full bg-amber-500" />
+            <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-amber-400 font-bold text-sm">
+                  <span>⚠️ تم ربط المنصة بنجاح ولكن مطلوب تفعيل الخدمات في حسابك الخاص</span>
+                </div>
+                <p className="text-xs text-slate-300 leading-relaxed max-w-3xl">
+                  لقد قمنا بربط المنصة بمشروع Firebase الشخصي الخاص بك <span className="text-emerald-400 font-mono font-bold">law-platform-1dd66</span> بنجاح. لتفعيل تسجيل الدخول وقاعدة البيانات بشكل كامل، يرجى القيام بالخطوتين التاليتين في كونسول Firebase الخاص بك:
+                </p>
+                <ul className="text-xs text-slate-400 space-y-1.5 list-disc list-inside mr-2 mt-2">
+                  <li>
+                    <strong className="text-slate-200">تفعيل قاعدة البيانات:</strong> اذهب إلى <a href="https://console.firebase.google.com/" target="_blank" rel="noreferrer" className="text-emerald-400 hover:underline">لوحة تحكم Firebase</a> ← اختر مشروعك ← اضغط على <strong className="text-slate-300">Firestore Database</strong> ← ثم اضغط على <strong className="text-slate-300">Create Database</strong> لإنشاء قاعدة البيانات الافتراضية.
+                  </li>
+                  <li>
+                    <strong className="text-slate-200">تفعيل خيار تسجيل الدخول:</strong> في لوحة التحكم ← اضغط على <strong className="text-slate-300">Authentication</strong> ← ثم تبويب <strong className="text-slate-300">Sign-in method</strong> ← اضغط على <strong className="text-slate-300">Add new provider</strong> ← اختر <strong className="text-slate-300">Email/Password</strong> وقم بتفعيله وحفظه.
+                  </li>
+                </ul>
+                <div className="text-[10px] text-amber-500/80 font-medium mt-1">
+                  * تفاصيل الخطأ الحالي المرتجع من خادم Firebase: {dbError}
+                </div>
+              </div>
+              <div className="flex flex-row md:flex-col gap-2 shrink-0 self-end md:self-start">
+                <button
+                  onClick={() => {
+                    setDbError(null);
+                  }}
+                  className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                >
+                  استمر في الوضع التجريبي ⚙️
+                </button>
+                <button
+                  onClick={() => {
+                    window.location.reload();
+                  }}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                >
+                  تحديث للتحقق من الاتصال 🔄
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6 relative">
         {!userSession ? (
           <div className="py-6">
@@ -398,6 +939,25 @@ export default function App() {
               onLoginSuccess={(session) => {
                 setUserSession(session);
                 setCurrentRole(session.role);
+                
+                // Automatically send login alert email to the user
+                if (session.email) {
+                  const loginEmailMsg = `شريكنا العزيز ${session.name}، تم تسجيل دخولك بنجاح إلى حسابك الخاص في منصة أصال للمحاماة والاستشارات القانونية اليوم في تمام الساعة ${new Date().toLocaleTimeString('ar-SA')}. إذا لم تكن أنت من قام بهذا الإجراء، يرجى مراجعة إدارة المنصة فوراً لحماية حسابك وقضيتك.`;
+                  sendRealNotification(session.email, '', 'إشعار تسجيل دخول ناجح - منصة أصال ⚖️', loginEmailMsg);
+                }
+
+                if (session.phone) {
+                  // Direct SMS welcome to their private phone number only
+                  const welcomeMsg = `أهلاً بك في منصة أصال للمحاماة والاستشارات القانونية. نسعد بتواجدك وخدمتك يا ${session.name} ونتمنى لك تجربة متميزة في بوابتنا القضائية الإلكترونية المعتمدة.`;
+                  sendRealNotification('', session.phone, 'أهلاً بك في منصة أصال ⚖️', welcomeMsg);
+
+                  setActiveToast({
+                    id: `login-sms-${Date.now()}`,
+                    title: '📱 رسالة ترحيبية SMS واردة للجوال الخاص',
+                    message: `تم إرسال ترحيب فوري لهاتفك الخاص (${session.phone}): أهلاً بك في منصة أصال للمحاماة...`,
+                    type: 'system'
+                  });
+                }
               }}
             />
           </div>
@@ -554,22 +1114,38 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Quick Database Reset */}
-                <div className="flex justify-end">
+                {/* Quick Database Reset - Only visible to Admin or Lawyer roles */}
+                {(currentRole === 'admin' || currentRole === 'lawyer') && (
+                  <div className="flex justify-end">
+                    <button
+                      onClick={handleResetDatabase}
+                      className="text-slate-400 hover:text-red-400 text-[10px] font-bold flex items-center gap-1.5 px-3 py-2 border border-slate-800 rounded-xl hover:bg-slate-950 cursor-pointer transition-all shrink-0"
+                      title="تفريغ كافة البيانات وإخلاء اللوحة بالكامل"
+                    >
+                      <RotateCcw className="w-3 h-3 text-red-400" />
+                      تفريغ وإعادة ضبط النظام
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ACTIVE DASHBOARD VIEW ROUTING */}
+            <div id="active-dashboard-viewport" className="min-h-[500px]">
+              {/* Quick Database Reset for Lawyer (Since Admin has it in the simulation bar) */}
+              {userSession && userSession.role === 'lawyer' && (
+                <div className="flex justify-end mb-4">
                   <button
                     onClick={handleResetDatabase}
-                    className="text-slate-400 hover:text-red-400 text-[10px] font-bold flex items-center gap-1.5 px-3 py-2 border border-slate-800 rounded-xl hover:bg-slate-950 cursor-pointer transition-all shrink-0"
+                    className="text-slate-400 hover:text-red-400 text-[10px] font-bold flex items-center gap-1.5 px-3 py-2 border border-slate-800 rounded-xl hover:bg-slate-950 cursor-pointer transition-all shrink-0 bg-slate-900 shadow-md"
                     title="تفريغ كافة البيانات وإخلاء اللوحة بالكامل"
                   >
                     <RotateCcw className="w-3 h-3 text-red-400" />
                     تفريغ وإعادة ضبط النظام
                   </button>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* ACTIVE DASHBOARD VIEW ROUTING */}
-            <div id="active-dashboard-viewport" className="min-h-[500px]">
               {/* Render Admin dashboard if user is admin AND has administrative view active */}
               {activeRoleToRender === 'admin' && (
                 <AdminDashboard
@@ -590,6 +1166,7 @@ export default function App() {
                   onDeleteLawyer={handleDeleteLawyer}
                   onDeleteTenant={handleDeleteTenant}
                   onLoadDemoData={handleLoadDemoData}
+                  onClearNotifications={handleClearNotifications}
                 />
               )}
 
@@ -603,6 +1180,7 @@ export default function App() {
                   onMarkNotificationRead={handleMarkNotificationRead}
                   onTriggerNotification={handleTriggerNotification}
                   loggedLawyerId={userSession.role === 'lawyer' ? userSession.id : (selectedSimulatedLawyerId || lawyers[0]?.id || '')}
+                  onClearNotifications={handleClearNotifications}
                 />
               )}
 
@@ -618,6 +1196,7 @@ export default function App() {
                   onUpdateInvoiceStatus={handleUpdateInvoiceStatus}
                   onTriggerNotification={handleTriggerNotification}
                   loggedTenantId={userSession.role === 'tenant' ? userSession.id : (selectedSimulatedTenantId || tenants[0]?.id || '')}
+                  onClearNotifications={handleClearNotifications}
                 />
               )}
             </div>

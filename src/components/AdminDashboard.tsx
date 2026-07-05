@@ -11,7 +11,6 @@ import {
   Clock, 
   AlertCircle, 
   UserPlus, 
-  DollarSign, 
   ShieldAlert,
   Send,
   Sliders,
@@ -21,7 +20,8 @@ import {
   Briefcase,
   FileText,
   BadgeAlert,
-  UserCheck
+  UserCheck,
+  Mail
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -30,24 +30,29 @@ interface AdminDashboardProps {
   lawyers: Lawyer[];
   tenants: Tenant[];
   notifications: Notification[];
-  onAddSession: (session: Omit<Session, 'id'>) => void;
+  onAddSession: (session: Omit<Session, 'id'>, channels?: { email: boolean; sms: boolean }) => void;
   onUpdateSessionStatus: (id: string, status: Session['status']) => void;
   onDeleteSession: (id: string) => void;
   onAddInvoice: (invoice: Omit<Invoice, 'id'>) => void;
   onUpdateInvoiceStatus: (id: string, status: Invoice['status']) => void;
   onDeleteInvoice: (id: string) => void;
   onTriggerNotification: (
-    targetRole: 'lawyer' | 'tenant' | 'all', 
+    targetRole: 'lawyer' | 'tenant' | 'all' | 'custom', 
     targetId: string, 
     title: string, 
     message: string, 
-    type: 'session' | 'invoice' | 'system'
+    type: 'session' | 'invoice' | 'system',
+    overrideEmail?: string,
+    overridePhone?: string,
+    senderName?: string,
+    channels?: { email: boolean; sms: boolean }
   ) => void;
   onAddLawyer: (lawyer: Omit<Lawyer, 'id'>) => void;
   onAddTenant: (tenant: Omit<Tenant, 'id'>) => void;
   onDeleteLawyer: (id: string) => void;
   onDeleteTenant: (id: string) => void;
   onLoadDemoData?: () => void;
+  onClearNotifications?: () => void;
 }
 
 export default function AdminDashboard({
@@ -67,10 +72,11 @@ export default function AdminDashboard({
   onAddTenant,
   onDeleteLawyer,
   onDeleteTenant,
-  onLoadDemoData
+  onLoadDemoData,
+  onClearNotifications
 }: AdminDashboardProps) {
-  // Tabs: 'stats' | 'sessions' | 'invoices' | 'people'
-  const [activeTab, setActiveTab] = useState<'stats' | 'sessions' | 'invoices' | 'people'>('stats');
+  // Tabs: 'stats' | 'sessions' | 'invoices' | 'people' | 'notifications'
+  const [activeTab, setActiveTab] = useState<'stats' | 'sessions' | 'invoices' | 'people' | 'notifications'>('stats');
 
   // New Lawyer Form State
   const [showLawyerForm, setShowLawyerForm] = useState(false);
@@ -98,7 +104,7 @@ export default function AdminDashboard({
     caseId: '',
     caseTitle: '',
     date: '',
-    day: 'الأحد',
+    day: '',
     time: '',
     plaintiff: '',
     defendant: '',
@@ -106,7 +112,12 @@ export default function AdminDashboard({
     tenantId: '',
     courtRoom: '',
     status: 'scheduled' as Session['status'],
-    notes: ''
+    notes: '',
+    city: '',
+    circuitNo: '',
+    hijriDate: '',
+    agencyNo: '',
+    agencyExpiryDate: ''
   });
 
   // New Invoice Form State
@@ -120,13 +131,31 @@ export default function AdminDashboard({
     description: ''
   });
 
-  // Custom Notification Form State
-  const [notifyTargetRole, setNotifyTargetRole] = useState<'lawyer' | 'tenant' | 'all'>('tenant');
+  // Custom Notification Form State (Dashboard Quick Form)
+  const [notifyTargetRole, setNotifyTargetRole] = useState<'lawyer' | 'tenant' | 'all' | 'custom'>('tenant');
   const [notifyTargetId, setNotifyTargetId] = useState('');
   const [notifyTitle, setNotifyTitle] = useState('');
   const [notifyMessage, setNotifyMessage] = useState('');
-  const [notifyType, setNotifyType] = useState<'session' | 'invoice' | 'system'>('system');
+  const [notifyType, setNotifyType] = useState<'session' | 'new_session' | 'invoice' | 'custom'>('session');
+  const [notifyEmail, setNotifyEmail] = useState('');
+  const [notifyPhone, setNotifyPhone] = useState('');
   const [notificationSuccess, setNotificationSuccess] = useState(false);
+
+  // Notification Channel Selection States
+  const [sessionNotifyEmail, setSessionNotifyEmail] = useState(true);
+  const [sessionNotifySMS, setSessionNotifySMS] = useState(true);
+  const [notifySendEmail, setNotifySendEmail] = useState(true);
+  const [notifySendSMS, setNotifySendSMS] = useState(true);
+  const [tabNotifySendEmail, setTabNotifySendEmail] = useState(true);
+  const [tabNotifySendSMS, setTabNotifySendSMS] = useState(true);
+
+  // Notifications Tab State
+  const [tabNotifyTargetId, setTabNotifyTargetId] = useState('');
+  const [tabNotifType, setTabNotifType] = useState<'session' | 'new_session' | 'invoice'>('session');
+  const [tabNotifyTitle, setTabNotifyTitle] = useState('');
+  const [tabNotifyMessage, setTabNotifyMessage] = useState('');
+  const [tabNotifyEmail, setTabNotifyEmail] = useState('');
+  const [tabNotifyPhone, setTabNotifyPhone] = useState('');
 
   // Stats Calculations
   const totalInvoicesAmount = invoices.reduce((sum, inv) => sum + inv.amount, 0);
@@ -136,15 +165,12 @@ export default function AdminDashboard({
 
   const handleAddSessionSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newSession.caseTitle || !newSession.date || !newSession.time || !newSession.plaintiff || !newSession.defendant || !newSession.lawyerId) {
-      alert('الرجاء تعبئة الحقول الأساسية للجلسة القضائية');
+    if (!newSession.caseTitle || !newSession.hijriDate || !newSession.time || !newSession.plaintiff || !newSession.defendant || !newSession.lawyerId || !newSession.day) {
+      alert('الرجاء تعبئة الحقول الأساسية للجلسة القضائية (اسم الدعوى، الأطراف، التاريخ الهجري، اليوم، التوقيت، والمحامي)');
       return;
     }
 
-    // Auto-calculate day of week from date
-    const dateObj = new Date(newSession.date);
-    const daysOfWeek = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
-    const dayName = daysOfWeek[dateObj.getDay()] || 'الأحد';
+    const finalDay = newSession.day;
 
     const assignedLawyer = lawyers.find(l => l.id === newSession.lawyerId || l.name === newSession.lawyerId);
     const assignedTenant = tenants.find(t => t.id === newSession.tenantId || t.name === newSession.tenantId);
@@ -154,10 +180,11 @@ export default function AdminDashboard({
 
     onAddSession({
       ...newSession,
+      date: newSession.hijriDate, // set date to hijriDate so everywhere uses it as the default date representation
       lawyerId: lawyerId,
       tenantId: tenantId,
-      day: dayName
-    });
+      day: finalDay
+    }, { email: sessionNotifyEmail, sms: false });
 
     // Auto trigger notification for Lawyer & Client if registered
     if (assignedLawyer) {
@@ -165,8 +192,12 @@ export default function AdminDashboard({
         'lawyer',
         assignedLawyer.id,
         'جلسة قضائية جديدة مسندة إليك',
-        `تم إسناد قضية "${newSession.caseTitle}" بخصوص المدعي: ${newSession.plaintiff} والمدعي عليه: ${newSession.defendant}. الجلسة بتاريخ ${newSession.date} الساعة ${newSession.time}.`,
-        'session'
+        `إشعار من منصة أصال القانونية: تم إسناد جلسة قضائية جديدة لك في قضية "${newSession.caseTitle}" (رقم القضية: ${newSession.caseId || 'غير محدد'}). التاريخ: ${newSession.hijriDate || newSession.date} الساعة ${newSession.time} بموقع: ${newSession.courtRoom || 'منصة الترافع الإلكترونية'}.`,
+        'session',
+        undefined,
+        undefined,
+        undefined,
+        { email: sessionNotifyEmail, sms: false }
       );
     }
 
@@ -175,8 +206,12 @@ export default function AdminDashboard({
         'tenant',
         assignedTenant.id,
         'تحديد موعد جلسة قضائية جديدة',
-        `تنبيه: تم تحديد موعد جلسة قضائية لك في قضية "${newSession.caseTitle}". التاريخ: ${newSession.date} (${dayName}) الساعة ${newSession.time} في ${newSession.courtRoom || 'منصة الترافع المعتمدة'}.`,
-        'session'
+        `إشعار من منصة أصال القانونية: تم جدولة جلسة قضائية جديدة لقضيتكم "${newSession.caseTitle}" (رقم القضية: ${newSession.caseId || 'غير محدد'}). التاريخ: ${newSession.hijriDate || newSession.date} الساعة ${newSession.time} بموقع أو رابط: ${newSession.courtRoom || 'منصة الترافع الإلكترونية'}.`,
+        'session',
+        undefined,
+        undefined,
+        undefined,
+        { email: sessionNotifyEmail, sms: false }
       );
     }
 
@@ -185,7 +220,7 @@ export default function AdminDashboard({
       caseId: '',
       caseTitle: '',
       date: '',
-      day: 'الأحد',
+      day: '',
       time: '',
       plaintiff: '',
       defendant: '',
@@ -193,7 +228,12 @@ export default function AdminDashboard({
       tenantId: '',
       courtRoom: '',
       status: 'scheduled',
-      notes: ''
+      notes: '',
+      city: '',
+      circuitNo: '',
+      hijriDate: '',
+      agencyNo: '',
+      agencyExpiryDate: ''
     });
     setShowSessionForm(false);
   };
@@ -280,9 +320,15 @@ export default function AdminDashboard({
 
   const handleQuickNotify = (e: React.FormEvent) => {
     e.preventDefault();
+    
     if (!notifyTitle || !notifyMessage) {
-      alert('يرجى كتابة عنوان ونص الإشعار');
+      alert('الرجاء كتابة عنوان الإشعار ونص الرسالة أولاً.');
       return;
+    }
+
+    let apiType: 'session' | 'invoice' | 'system' = 'session';
+    if (notifyType === 'invoice') {
+      apiType = 'invoice';
     }
 
     onTriggerNotification(
@@ -290,12 +336,14 @@ export default function AdminDashboard({
       notifyTargetId,
       notifyTitle,
       notifyMessage,
-      notifyType
+      apiType,
+      notifyEmail || undefined,
+      undefined,
+      'إدارة منصة أصال',
+      { email: notifySendEmail, sms: false }
     );
 
     setNotificationSuccess(true);
-    setNotifyTitle('');
-    setNotifyMessage('');
     setTimeout(() => {
       setNotificationSuccess(false);
     }, 4000);
@@ -310,7 +358,7 @@ export default function AdminDashboard({
         'tenant',
         tenant.id,
         'تحديث هام بشأن موعد جلستكم القضائية',
-        `تذكير الإدارة: يرجى الالتزام بموعد الجلسة المجدولة بتاريخ ${session.date} الساعة ${session.time} في "${session.courtRoom}". يرجى إعداد مستنداتكم مسبقاً.`,
+        `إشعار من منصة أصال القانونية: تذكير وتحديث بخصوص جلستكم في قضية "${session.caseTitle}" (رقم القضية: ${session.caseId || 'غير محدد'}). التاريخ: ${session.hijriDate || session.date} الساعة ${session.time} بموقع أو رابط: ${session.courtRoom || 'منصة الترافع الإلكترونية'}.`,
         'session'
       );
     }
@@ -320,7 +368,7 @@ export default function AdminDashboard({
         'lawyer',
         lawyer.id,
         'إشعار تذكيري بموعد الجلسة المسندة',
-        `تذكير الإدارة للمحامي: يرجى مراجعة ملف القضية وتوجيهات الموكل ${tenant?.name || 'العميل'} لجلسة ${session.date}.`,
+        `إشعار من منصة أصال القانونية: تذكير بموعد جلستكم المسندة في قضية "${session.caseTitle}" (رقم القضية: ${session.caseId || 'غير محدد'}). التاريخ: ${session.hijriDate || session.date} الساعة ${session.time} بموقع: ${session.courtRoom || 'منصة الترافع الإلكترونية'} للعميل الموكل: ${tenant?.name || 'العميل'}.`,
         'session'
       );
     }
@@ -407,13 +455,49 @@ export default function AdminDashboard({
           <Users className="w-4 h-4" />
           دليل المحامين والعملاء ({lawyers.length + tenants.length})
         </button>
+        <button 
+          id="tab-btn-notifications"
+          onClick={() => setActiveTab('notifications')}
+          className={`py-3 px-5 font-bold text-xs flex items-center gap-2 transition-all shrink-0 border-b-2 rounded-t-xl ${
+            activeTab === 'notifications' 
+              ? 'border-amber-500 text-amber-400 bg-amber-500/5' 
+              : 'border-transparent text-slate-400 hover:text-slate-200'
+          }`}
+        >
+          <Bell className="w-4 h-4" />
+          إرسال إشعار للعميل ({notifications.length})
+        </button>
       </div>
 
       {/* 1. OVERVIEW STATS TAB */}
       {activeTab === 'stats' && (
         <div id="stats-tab-content" className="space-y-6 animate-fade-in">
           {/* Top Cards Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+            <div className="p-5 bg-slate-900 border border-slate-800 rounded-3xl flex items-center justify-between shadow-md">
+              <div>
+                <span className="text-slate-400 text-[11px] block mb-1">إجمالي السادة المحامين</span>
+                <span className="text-2xl font-black text-amber-400">
+                  {lawyers.length} <span className="text-xs font-normal text-slate-500">مستشارين</span>
+                </span>
+              </div>
+              <div className="p-3 bg-amber-500/10 text-amber-400 rounded-2xl border border-amber-500/20">
+                <Scale className="w-6 h-6" />
+              </div>
+            </div>
+
+            <div className="p-5 bg-slate-900 border border-slate-800 rounded-3xl flex items-center justify-between shadow-md">
+              <div>
+                <span className="text-slate-400 text-[11px] block mb-1">إجمالي السادة العملاء</span>
+                <span className="text-2xl font-black text-slate-100">
+                  {tenants.length} <span className="text-xs font-normal text-slate-500">مستفيدين</span>
+                </span>
+              </div>
+              <div className="p-3 bg-blue-500/10 text-blue-400 rounded-2xl border border-blue-500/15">
+                <Users className="w-6 h-6" />
+              </div>
+            </div>
+
             <div className="p-5 bg-slate-900 border border-slate-800 rounded-3xl flex items-center justify-between shadow-md">
               <div>
                 <span className="text-slate-400 text-[11px] block mb-1">جلسات الترافع القادمة</span>
@@ -443,223 +527,292 @@ export default function AdminDashboard({
                   {paidInvoicesAmount.toLocaleString()} <span className="text-xs font-normal text-slate-500">ريال</span>
                 </span>
               </div>
-              <div className="p-3 bg-emerald-500/10 text-emerald-400 rounded-2xl border border-emerald-500/10">
-                <DollarSign className="w-6 h-6" />
-              </div>
-            </div>
-
-            <div className="p-5 bg-slate-900 border border-slate-800 rounded-3xl flex items-center justify-between shadow-md">
-              <div>
-                <span className="text-slate-400 text-[11px] block mb-1">إجمالي المقيدين بالمنصة</span>
-                <span className="text-2xl font-black text-slate-100">
-                  {lawyers.length + tenants.length} <span className="text-xs font-normal text-slate-500">({lawyers.length} محامين / {tenants.length} عملاء)</span>
-                </span>
-              </div>
-              <div className="p-3 bg-blue-500/10 text-blue-400 rounded-2xl border border-blue-500/10">
-                <Users className="w-6 h-6" />
+              <div className="w-12 h-12 bg-emerald-500/10 text-emerald-400 rounded-2xl border border-emerald-500/10 flex items-center justify-center font-black text-sm select-none">
+                ر.س
               </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             
-            {/* Custom Notification Box */}
-            <div className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-3xl p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-2.5 bg-amber-500/10 text-amber-400 rounded-xl border border-amber-500/15">
-                  <Bell className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-sm text-slate-100">بث إشعار فوري للأطراف</h3>
-                  <p className="text-xs text-slate-400">إرسال تنبيه أو إرشاد فوري لمستشار معين، أو موكل محدد، أو تعميم للجميع يظهر في لوحاتهم.</p>
-                </div>
-              </div>
-
-              <form onSubmit={handleQuickNotify} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Right Column: Quick Notification Form */}
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4 shadow-md">
+              <h3 className="font-extrabold text-sm text-amber-400 flex items-center gap-1.5 border-b border-slate-800 pb-3">
+                <Send className="w-5 h-5 text-amber-500" />
+                إرسال إشعار وتنبيه فوري للعميل أو المحامي
+              </h3>
+              
+              <form onSubmit={handleQuickNotify} className="space-y-3.5">
+                <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[11px] text-slate-400 mb-1">توجيه التنبيه إلى فئة:</label>
+                    <label className="block text-[10px] text-slate-400 mb-1">الفئة المستهدفة:</label>
                     <select
                       value={notifyTargetRole}
                       onChange={(e) => {
-                        setNotifyTargetRole(e.target.value as any);
+                        const role = e.target.value as any;
+                        setNotifyTargetRole(role);
                         setNotifyTargetId('');
+                        setNotifyEmail('');
+                        setNotifyPhone('');
                       }}
-                      className="w-full text-xs p-2.5 border border-slate-800 rounded-xl bg-slate-950 focus:border-amber-500 focus:outline-none text-slate-200"
+                      className="w-full text-xs p-2.5 border border-slate-800 rounded-xl bg-slate-950 text-slate-200 focus:border-amber-500 focus:outline-none"
                     >
-                      <option value="tenant">عميل / موكل محدد</option>
-                      <option value="lawyer">محامي ومستشار محدد</option>
-                      <option value="all">الجميع (محامين وعملاء)</option>
+                      <option value="tenant">العملاء الموكلين</option>
+                      <option value="lawyer">المحامين والمستشارين</option>
+                      <option value="all">الجميع (بث عام)</option>
+                      <option value="custom">شخص مخصص (بريد خارجي / جوال محدد)</option>
                     </select>
                   </div>
 
-                  {notifyTargetRole !== 'all' && (
-                    <div>
-                      <label className="block text-[11px] text-slate-400 mb-1">اختر الشخص المستهدف أو اكتب اسمه:</label>
+                  <div>
+                    <label className="block text-[10px] text-slate-400 mb-1">
+                      {notifyTargetRole === 'custom' ? 'اسم المستلم المخصص:' : 'تحديد المستلم المحدد:'}
+                    </label>
+                    {notifyTargetRole === 'custom' ? (
                       <input
                         type="text"
-                        placeholder={notifyTargetRole === 'tenant' ? "اكتب اسم العميل أو الموكل" : "اكتب اسم المحامي المستهدف"}
+                        placeholder="مثال: محمد بن علي"
+                        required
                         value={notifyTargetId}
                         onChange={(e) => setNotifyTargetId(e.target.value)}
-                        required
-                        list="notify-target-list"
-                        className="w-full text-xs p-2.5 border border-slate-800 rounded-xl bg-slate-950 text-slate-200 focus:border-amber-500 focus:outline-none"
+                        className="w-full text-xs p-2.5 border border-slate-800 rounded-xl bg-slate-950 text-slate-200 focus:border-amber-500 focus:outline-none font-bold"
                       />
-                      <datalist id="notify-target-list">
-                        {notifyTargetRole === 'tenant' && tenants.map(t => (
-                          <option key={t.id} value={t.id}>{t.name}</option>
-                        ))}
-                        {notifyTargetRole === 'lawyer' && lawyers.map(l => (
-                          <option key={l.id} value={l.id}>{l.name}</option>
-                        ))}
-                      </datalist>
-                    </div>
-                  )}
+                    ) : (
+                      <select
+                        value={notifyTargetId}
+                        onChange={(e) => {
+                          const id = e.target.value;
+                          setNotifyTargetId(id);
+                          if (notifyTargetRole === 'tenant') {
+                            const t = tenants.find(item => item.id === id);
+                            if (t) {
+                              setNotifyEmail(t.email || '');
+                              setNotifyPhone(t.phone || '');
+                            }
+                          } else if (notifyTargetRole === 'lawyer') {
+                            const l = lawyers.find(item => item.id === id);
+                            if (l) {
+                              setNotifyEmail(l.email || '');
+                              setNotifyPhone(l.phone || '');
+                            }
+                          }
+                        }}
+                        disabled={notifyTargetRole === 'all'}
+                        className="w-full text-xs p-2.5 border border-slate-800 rounded-xl bg-slate-950 text-slate-200 focus:border-amber-500 focus:outline-none disabled:opacity-40 font-bold"
+                      >
+                        <option value="">-- اختر من القائمة --</option>
+                        {notifyTargetRole === 'tenant' ? (
+                          tenants.map(t => <option key={t.id} value={t.id}>{t.name}</option>)
+                        ) : (
+                          lawyers.map(l => <option key={l.id} value={l.id}>{l.name}</option>)
+                        )}
+                      </select>
+                    )}
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-[11px] text-slate-400 mb-1">تصنيف الإشعار:</label>
-                    <select
-                      value={notifyType}
-                      onChange={(e) => setNotifyType(e.target.value as any)}
-                      className="w-full text-xs p-2.5 border border-slate-800 rounded-xl bg-slate-950 focus:border-amber-500 focus:outline-none text-slate-200"
-                    >
-                      <option value="system">تنبيه إداري عام</option>
-                      <option value="session">مواعيد وتحديثات الجلسات</option>
-                      <option value="invoice">الفواتير والأتعاب</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] text-slate-400 mb-1">عنوان الإشعار:</label>
+                <div className="space-y-1">
+                  <label className="block text-[10px] text-slate-400 mb-1 flex items-center gap-1.5">
+                    <Mail className="w-3.5 h-3.5 text-amber-500" />
+                    <span>البريد الإلكتروني للمستلم (يمكن تعديله):</span>
+                  </label>
+                  <div className="relative">
                     <input
-                      type="text"
-                      placeholder="مثال: يرجى تسليم مستندات الوكالة المعدلة"
-                      value={notifyTitle}
-                      onChange={(e) => setNotifyTitle(e.target.value)}
-                      required
-                      className="w-full text-xs p-2.5 border border-slate-800 rounded-xl bg-slate-950 text-slate-200 focus:border-amber-500 focus:outline-none"
+                      type="email"
+                      placeholder="عنوان البريد الإلكتروني الحقيقي"
+                      value={notifyEmail}
+                      onChange={(e) => setNotifyEmail(e.target.value)}
+                      disabled={notifyTargetRole === 'all'}
+                      className="w-full text-[11px] py-2 pr-9 pl-3 border border-slate-800 rounded-xl bg-slate-950 text-slate-300 focus:border-amber-500 focus:outline-none disabled:opacity-40"
                     />
+                    <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none">
+                      <Mail className="w-3.5 h-3.5 text-slate-500" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Notification channels selection - Only Email is Active with icon */}
+                <div className="p-3 bg-slate-950 border border-slate-850 rounded-2xl flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="text-[10px] text-slate-300">قناة البث الفوري المعتمدة:</span>
+                  </div>
+                  <div className="flex items-center gap-1 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-lg text-[10px] text-amber-400 font-extrabold">
+                    <Mail className="w-3 h-3 text-amber-500" />
+                    البريد الإلكتروني النشط 📧
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-[11px] text-slate-400 mb-1">نص ومضمون الرسالة الموجهة:</label>
-                  <textarea
-                    rows={2}
-                    placeholder="اكتب هنا الإرشاد أو التفاصيل القانونية والخطوات المطلوبة من المستلم بدقة..."
-                    value={notifyMessage}
-                    onChange={(e) => setNotifyMessage(e.target.value)}
+                  <label className="block text-[10px] text-slate-400 mb-1">نوع الإشعار والتصنيف القضائي:</label>
+                  <select
+                    value={notifyType}
+                    onChange={(e) => {
+                      const type = e.target.value as any;
+                      setNotifyType(type);
+                      if (type === 'new_session') {
+                        setNotifyTitle('جدولة جلسة قضائية جديدة ⚖️');
+                        setNotifyMessage('إشعار من منصة أصال القانونية: تم جدولة جلسة قضائية جديدة في ملفكم. يرجى مراجعة تفاصيل ومواعيد الجلسة في بوابتكم القضائية والالتزام بالحضور الإلكتروني.');
+                      } else if (type === 'session') {
+                        setNotifyTitle('تحديث هام بشأن موعد جلستكم القضائية ⚖️');
+                        setNotifyMessage('إشعار من منصة أصال القانونية: يرجى تفقد جدول الجلسات الخاص بكم للوقوف على آخر التحديثات ومواعيد الجلسات القضائية والالتزام بمواعيد المرافعة الإلكترونية.');
+                      } else if (type === 'invoice') {
+                        setNotifyTitle('مطالبة مالية وسداد أتعاب قانونية 💳');
+                        setNotifyMessage('إشعار من منصة أصال القانونية: تم تحديث حسابكم بمطالبة مالية عاجلة أو فاتورة أتعاب قانونية جديدة مستحقة السداد. يرجى مراجعة قسم الفواتير وسداد المستحقات الكترونياً.');
+                      } else {
+                        setNotifyTitle('');
+                        setNotifyMessage('');
+                      }
+                    }}
+                    className="w-full text-xs p-2.5 border border-slate-800 rounded-xl bg-slate-950 text-slate-200 focus:border-amber-500 focus:outline-none"
+                  >
+                    <option value="session">تحديث جلسة وموعد مرافعة (تلقائي)</option>
+                    <option value="new_session">جدولة جلسة قضائية جديدة (تلقائي)</option>
+                    <option value="invoice">مطالبة مالية وفاتورة أتعاب (تلقائي)</option>
+                    <option value="custom">-- كتابة إشعار وبريد مخصص يدويًا --</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] text-slate-400 mb-1">عنوان التنبيه الرئيسي (موضوع البريد الإلكتروني):</label>
+                  <input
+                    type="text"
+                    placeholder="مثال: موعد جلسة المحكمة التجارية غداً"
                     required
+                    value={notifyTitle}
+                    onChange={(e) => setNotifyTitle(e.target.value)}
                     className="w-full text-xs p-2.5 border border-slate-800 rounded-xl bg-slate-950 text-slate-200 focus:border-amber-500 focus:outline-none"
                   />
                 </div>
 
-                <div className="flex justify-between items-center pt-2">
-                  {notificationSuccess ? (
-                    <div className="text-emerald-400 text-xs flex items-center gap-1.5 font-bold animate-pulse">
-                      <CheckCircle2 className="w-4 h-4" />
-                      تم بث الإشعار بنجاح! سيتم تنبيه المستخدم فوراً في لوحته.
-                    </div>
-                  ) : <span></span>}
-
-                  <button
-                    type="submit"
-                    className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs py-2 px-5 rounded-xl flex items-center gap-2 cursor-pointer transition-colors shadow-md shadow-amber-500/5"
-                  >
-                    <Send className="w-4 h-4" />
-                    إرسال الإشعار الآن
-                  </button>
+                <div>
+                  <label className="block text-[10px] text-slate-400 mb-1">نص وتفاصيل رسالة الإشعار والبريد الإلكتروني:</label>
+                  <textarea
+                    placeholder="اكتب تفاصيل التنبيه الذي سيصل كرسالة SMS وتنبيه بريد إلكتروني حقيقي للمستلم..."
+                    required
+                    value={notifyMessage}
+                    onChange={(e) => setNotifyMessage(e.target.value)}
+                    rows={3}
+                    className="w-full text-xs p-2.5 border border-slate-800 rounded-xl bg-slate-950 text-slate-200 focus:border-amber-500 focus:outline-none resize-none"
+                  />
                 </div>
+
+                {notificationSuccess && (
+                  <div className="p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-center text-xs text-emerald-400 font-bold">
+                    ✓ تم بث الإشعار بنجاح وإرساله بالبريد الإلكتروني والـ SMS للمستهدفين!
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  className="w-full py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl transition-all cursor-pointer shadow-md shadow-amber-500/5 flex items-center justify-center gap-1.5"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  بث الإشعار وإرساله فوراً للعميل
+                </button>
               </form>
             </div>
 
-            {/* Quick Actions Panel */}
-            <div className="bg-slate-950 border border-slate-800 rounded-3xl p-6 flex flex-col justify-between shadow-inner">
-              <div>
-                <h3 className="font-extrabold text-sm mb-2 text-amber-400 flex items-center gap-1.5">
-                  <Briefcase className="w-4 h-4 text-amber-500" />
-                  أدوات المحاكاة والتحكم والترابط
-                </h3>
-                <p className="text-xs text-slate-400 leading-relaxed mb-4">
-                  تتميز منصة أصال بدعمها الكامل لمدخلات الإدارة الحية وقدرتها على البدء فارغة. عند إضافة جلسة أو مطالبة أو مستشار، يتم الترابط تلقائياً.
-                </p>
-                
-                <div className="space-y-3">
-                  <div className="p-3 bg-slate-900 border border-slate-800 rounded-2xl flex items-start gap-2">
-                    <span className="text-amber-500 font-bold text-xs">💡 تذكير:</span>
-                    <p className="text-[11px] text-slate-300 leading-relaxed">
-                      عند إضافة جلسة جديدة وتعيين محامي أو موكل، تظهر الجلسة والتعليمات في بواباتهم الخاصة فورياً.
-                    </p>
-                  </div>
+            {/* Left Column: Quick Actions Panel & Quick Logs Feed */}
+            <div className="space-y-6">
+              
+              {/* Quick Actions Panel */}
+              <div className="bg-slate-950 border border-slate-800 rounded-3xl p-6 flex flex-col justify-between shadow-inner">
+                <div>
+                  <h3 className="font-extrabold text-sm mb-2 text-amber-400 flex items-center gap-1.5">
+                    <Briefcase className="w-4 h-4 text-amber-500" />
+                    أدوات المحاكاة والتحكم والترابط
+                  </h3>
+                  <p className="text-xs text-slate-400 leading-relaxed mb-4">
+                    تتميز منصة أصال بدعمها الكامل لمدخلات الإدارة الحية وقدرتها على البدء فارغة. عند إضافة جلسة أو مطالبة أو مستشار, يتم الترابط تلقائياً.
+                  </p>
+                  
+                  <div className="space-y-3">
+                    <div className="p-3 bg-slate-900 border border-slate-800 rounded-2xl flex items-start gap-2">
+                      <span className="text-amber-500 font-bold text-xs">💡 تذكير:</span>
+                      <p className="text-[11px] text-slate-300 leading-relaxed">
+                        عند إضافة جلسة جديدة وتعيين محامي أو موكل، تظهر الجلسة والتعليمات في بواباتهم الخاصة فورياً.
+                      </p>
+                    </div>
 
-                  <div className="p-3 bg-slate-900 border border-slate-800 rounded-2xl flex items-start gap-2">
-                    <span className="text-amber-500 font-bold text-xs">🔑 دخول:</span>
-                    <p className="text-[11px] text-slate-300 leading-relaxed">
-                      يمكنك معرفة كلمات المرور والبريد الإلكتروني للجميع في تبويب "دليل المحامين والعملاء" للولوج بها.
-                    </p>
+                    <div className="p-3 bg-slate-900 border border-slate-800 rounded-2xl flex items-start gap-2">
+                      <span className="text-amber-500 font-bold text-xs">🔑 دخول:</span>
+                      <p className="text-[11px] text-slate-300 leading-relaxed">
+                        يمكنك معرفة كلمات المرور والبريد الإلكتروني للجميع في تبويب "دليل المحامين والعملاء" للولوج بها.
+                      </p>
+                    </div>
                   </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 mt-6">
+                  <button 
+                    onClick={() => { setActiveTab('sessions'); setShowSessionForm(true); }}
+                    className="bg-amber-500 hover:bg-amber-400 text-slate-950 text-[11px] font-black py-2 px-3 rounded-xl transition-all flex items-center justify-center gap-1 cursor-pointer"
+                  >
+                    <PlusCircle className="w-3.5 h-3.5" />
+                    جدولة جلسة
+                  </button>
+                  <button 
+                    onClick={() => { setActiveTab('invoices'); setShowInvoiceForm(true); }}
+                    className="bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-200 text-[11px] font-black py-2 px-3 rounded-xl transition-all flex items-center justify-center gap-1 cursor-pointer"
+                  >
+                    <Receipt className="w-3.5 h-3.5 text-amber-500" />
+                    إصدار مطالبة
+                  </button>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3 mt-6">
-                <button 
-                  onClick={() => { setActiveTab('sessions'); setShowSessionForm(true); }}
-                  className="bg-amber-500 hover:bg-amber-400 text-slate-950 text-[11px] font-black py-2 px-3 rounded-xl transition-all flex items-center justify-center gap-1 cursor-pointer"
-                >
-                  <PlusCircle className="w-3.5 h-3.5" />
-                  جدولة جلسة
-                </button>
-                <button 
-                  onClick={() => { setActiveTab('invoices'); setShowInvoiceForm(true); }}
-                  className="bg-slate-900 hover:bg-slate-850 border border-slate-800 text-slate-200 text-[11px] font-black py-2 px-3 rounded-xl transition-all flex items-center justify-center gap-1 cursor-pointer"
-                >
-                  <Receipt className="w-3.5 h-3.5 text-amber-500" />
-                  إصدار مطالبة
-                </button>
-              </div>
-            </div>
-
-          </div>
-
-          {/* Quick Logs Feed */}
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6">
-            <h3 className="font-bold text-sm text-slate-100 mb-4 flex items-center gap-2">
-              <Bell className="w-5 h-5 text-amber-400" />
-              سجل آخر التنبيهات المرسلة من نظام المحاماة
-            </h3>
-            {notifications.length === 0 ? (
-              <p className="text-xs text-slate-500 py-6 text-center">لا توجد إشعارات مرسلة حالياً.</p>
-            ) : (
-              <div className="divide-y divide-slate-800 max-h-[220px] overflow-y-auto pr-2">
-                {notifications.slice(0, 5).map((notif) => (
-                  <div key={notif.id} className="py-3 flex items-start justify-between">
-                    <div className="flex gap-3">
-                      <div className={`p-2 rounded-xl shrink-0 mt-0.5 ${
-                        notif.type === 'session' ? 'bg-amber-500/10 text-amber-400' :
-                        notif.type === 'invoice' ? 'bg-emerald-500/10 text-emerald-400' :
-                        'bg-blue-500/10 text-blue-400'
-                      }`}>
-                        <Bell className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <h4 className="font-bold text-xs text-slate-200">{notif.title}</h4>
-                        <p className="text-xs text-slate-400 mt-1 leading-normal">{notif.message}</p>
-                        <span className="text-[10px] text-slate-500 block mt-1.5">
-                          موجه إلى: {notif.targetRole === 'all' ? 'الجميع' : notif.targetRole === 'lawyer' ? 'المحامي' : 'العميل الموكل'} | {notif.timestamp}
+              {/* Quick Logs Feed */}
+              <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-md">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-bold text-sm text-slate-100 flex items-center gap-2">
+                    <Bell className="w-5 h-5 text-amber-400" />
+                    سجل آخر التنبيهات المرسلة من نظام المحاماة
+                  </h3>
+                  {notifications.length > 0 && onClearNotifications && (
+                    <button
+                      onClick={onClearNotifications}
+                      className="text-slate-400 hover:text-red-400 text-xs px-2 py-1 rounded-lg border border-slate-800 hover:bg-slate-950 cursor-pointer transition-colors"
+                    >
+                      مسح التنبيهات
+                    </button>
+                  )}
+                </div>
+                {notifications.length === 0 ? (
+                  <p className="text-xs text-slate-500 py-6 text-center">لا توجد إشعارات مرسلة حالياً.</p>
+                ) : (
+                  <div className="divide-y divide-slate-800 max-h-[220px] overflow-y-auto pr-2">
+                    {notifications.slice(0, 5).map((notif) => (
+                      <div key={notif.id} className="py-3 flex items-start justify-between">
+                        <div className="flex gap-3">
+                          <div className={`p-2 rounded-xl shrink-0 mt-0.5 ${
+                            notif.type === 'session' ? 'bg-amber-500/10 text-amber-400' :
+                            notif.type === 'invoice' ? 'bg-emerald-500/10 text-emerald-400' :
+                            'bg-blue-500/10 text-blue-400'
+                          }`}>
+                            <Bell className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <h4 className="font-bold text-xs text-slate-200">{notif.title}</h4>
+                            <p className="text-xs text-slate-400 mt-1 leading-normal">{notif.message}</p>
+                            <span className="text-[10px] text-slate-500 block mt-1.5">
+                              موجه إلى: {notif.targetRole === 'all' ? 'الجميع' : notif.targetRole === 'lawyer' ? 'المحامي' : 'العميل الموكل'} | {notif.timestamp}
+                            </span>
+                          </div>
+                        </div>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg shrink-0 h-fit ${
+                          notif.isRead ? 'bg-slate-800 text-slate-400' : 'bg-red-500/10 text-red-400 border border-red-500/10'
+                        }`}>
+                          {notif.isRead ? 'تلقاه وقرأه' : 'قيد الانتظار'}
                         </span>
                       </div>
-                    </div>
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg shrink-0 h-fit ${
-                      notif.isRead ? 'bg-slate-800 text-slate-400' : 'bg-red-500/10 text-red-400 border border-red-500/10'
-                    }`}>
-                      {notif.isRead ? 'تلقاه وقرأه' : 'قيد الانتظار'}
-                    </span>
+                    ))}
                   </div>
-                ))}
+                )}
               </div>
-            )}
+
+            </div>
+
           </div>
         </div>
       )}
@@ -750,16 +903,75 @@ export default function AdminDashboard({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div>
-                    <label className="block text-[11px] text-slate-400 mb-1">تاريخ الجلسة:</label>
+                    <label className="block text-[11px] text-amber-400 font-bold mb-1">التاريخ الهجري للجلسة:</label>
                     <input
-                      type="date"
-                      value={newSession.date}
-                      onChange={(e) => setNewSession({...newSession, date: e.target.value})}
+                      type="text"
+                      placeholder="مثال: ١٩ محرم ١٤٤٨ هـ"
+                      value={newSession.hijriDate}
+                      onChange={(e) => setNewSession({...newSession, hijriDate: e.target.value})}
                       required
-                      className="w-full text-xs p-2.5 border border-slate-800 rounded-xl bg-slate-900 text-slate-200 focus:border-amber-500 focus:outline-none"
+                      className="w-full text-xs p-2.5 border border-amber-500/30 rounded-xl bg-amber-500/5 text-amber-200 focus:border-amber-500 focus:outline-none font-bold"
                     />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-slate-400 mb-1">اليوم:</label>
+                    <select
+                      value={newSession.day}
+                      onChange={(e) => {
+                        const selectedDay = e.target.value;
+                        const dayMap: { [key: string]: number } = {
+                          'الأحد': 0,
+                          'الإثنين': 1,
+                          'الثلاثاء': 2,
+                          'الأربعاء': 3,
+                          'الخميس': 4,
+                          'الجمعة': 5,
+                          'السبت': 6
+                        };
+                        const targetDayIndex = dayMap[selectedDay];
+                        if (targetDayIndex !== undefined) {
+                          const today = new Date();
+                          const currentDayIndex = today.getDay();
+                          let daysToAdd = targetDayIndex - currentDayIndex;
+                          if (daysToAdd < 0) {
+                            daysToAdd += 7;
+                          }
+                          const targetDate = new Date();
+                          targetDate.setDate(today.getDate() + daysToAdd);
+                          try {
+                            const formatter = new Intl.DateTimeFormat('ar-SA-u-ca-islamic', {
+                              day: 'numeric',
+                              month: 'long',
+                              year: 'numeric'
+                            });
+                            const computedHijri = formatter.format(targetDate);
+                            setNewSession(prev => ({
+                              ...prev,
+                              day: selectedDay,
+                              hijriDate: computedHijri
+                            }));
+                          } catch (err) {
+                            console.error(err);
+                            setNewSession(prev => ({ ...prev, day: selectedDay }));
+                          }
+                        } else {
+                          setNewSession(prev => ({ ...prev, day: selectedDay }));
+                        }
+                      }}
+                      required
+                      className="w-full text-xs p-2.5 border border-slate-800 rounded-xl bg-slate-900 text-slate-200 focus:border-amber-500 focus:outline-none font-bold"
+                    >
+                      <option value="">اختر يوم الجلسة</option>
+                      <option value="الأحد">الأحد</option>
+                      <option value="الإثنين">الإثنين</option>
+                      <option value="الثلاثاء">الثلاثاء</option>
+                      <option value="الأربعاء">الأربعاء</option>
+                      <option value="الخميس">الخميس</option>
+                      <option value="الجمعة">الجمعة</option>
+                      <option value="السبت">السبت</option>
+                    </select>
                   </div>
                   <div>
                     <label className="block text-[11px] text-slate-400 mb-1">موعد الجلسة:</label>
@@ -789,22 +1001,49 @@ export default function AdminDashboard({
                       ))}
                     </datalist>
                   </div>
+                </div>
+
+                {/* New fields: City, Circuit Number, Agency Number, Agency Expiry */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 border-t border-slate-800/60 pt-4">
                   <div>
-                    <label className="block text-[11px] text-slate-400 mb-1">العميل والموكل ذو العلاقة أو اكتب اسمه:</label>
+                    <label className="block text-[11px] text-slate-400 mb-1">المدينة:</label>
                     <input
                       type="text"
-                      placeholder="اكتب اسم العميل أو اختره"
-                      value={newSession.tenantId}
-                      onChange={(e) => setNewSession({...newSession, tenantId: e.target.value})}
-                      required
-                      list="session-tenants-datalist"
+                      placeholder="مثال: الرياض، مكة المكرمة، الدمام"
+                      value={newSession.city}
+                      onChange={(e) => setNewSession({...newSession, city: e.target.value})}
                       className="w-full text-xs p-2.5 border border-slate-800 rounded-xl bg-slate-900 text-slate-200 focus:border-amber-500 focus:outline-none"
                     />
-                    <datalist id="session-tenants-datalist">
-                      {tenants.map(t => (
-                        <option key={t.id} value={t.id}>{t.name}</option>
-                      ))}
-                    </datalist>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-slate-400 mb-1">رقم الدائرة القضائية:</label>
+                    <input
+                      type="text"
+                      placeholder="مثال: الدائرة التجارية الثالثة"
+                      value={newSession.circuitNo}
+                      onChange={(e) => setNewSession({...newSession, circuitNo: e.target.value})}
+                      className="w-full text-xs p-2.5 border border-slate-800 rounded-xl bg-slate-900 text-slate-200 focus:border-amber-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-slate-400 mb-1">رقم الوكالة القضائية:</label>
+                    <input
+                      type="text"
+                      placeholder="مثال: 441029302"
+                      value={newSession.agencyNo}
+                      onChange={(e) => setNewSession({...newSession, agencyNo: e.target.value})}
+                      className="w-full text-xs p-2.5 border border-slate-800 rounded-xl bg-slate-900 text-slate-200 focus:border-amber-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-slate-400 mb-1">تاريخ انتهاء الوكالة:</label>
+                    <input
+                      type="text"
+                      placeholder="مثال: ١٥ رمضان ١٤٥٠ هـ"
+                      value={newSession.agencyExpiryDate}
+                      onChange={(e) => setNewSession({...newSession, agencyExpiryDate: e.target.value})}
+                      className="w-full text-xs p-2.5 border border-slate-800 rounded-xl bg-slate-900 text-slate-200 focus:border-amber-500 focus:outline-none"
+                    />
                   </div>
                 </div>
 
@@ -817,6 +1056,18 @@ export default function AdminDashboard({
                     onChange={(e) => setNewSession({...newSession, notes: e.target.value})}
                     className="w-full text-xs p-2.5 border border-slate-800 rounded-xl bg-slate-900 text-slate-200 focus:border-amber-500 focus:outline-none"
                   />
+                </div>
+
+                {/* Notification channels selection when scheduling session - Only Email is Active with icon */}
+                <div className="p-3 bg-slate-900 border border-slate-800 rounded-2xl flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="text-[10px] text-slate-300">قناة إشعار الجلسة المعتمدة:</span>
+                  </div>
+                  <div className="flex items-center gap-1 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-lg text-[10px] text-amber-400 font-extrabold">
+                    <Mail className="w-3 h-3 text-amber-500" />
+                    البريد الإلكتروني التلقائي 📧
+                  </div>
                 </div>
 
                 <div className="flex justify-end gap-3 pt-2">
@@ -865,10 +1116,10 @@ export default function AdminDashboard({
                           <span className="font-bold block text-slate-100">{session.caseTitle}</span>
                           <span className="text-[10px] text-amber-500 font-mono block mt-1">رمز الدعوى: {session.caseId}</span>
                         </td>
-                        <td className="py-4 px-4">
-                          <div className="flex items-center gap-1.5 text-slate-200 font-bold">
-                            <Clock className="w-4 h-4 text-slate-500 shrink-0" />
-                            <span>{session.day} - {session.date}</span>
+                         <td className="py-4 px-4">
+                          <div className="flex items-center gap-1.5 text-amber-400 font-bold">
+                            <Clock className="w-4 h-4 shrink-0 text-amber-500" />
+                            <span>{session.day} - {session.hijriDate || session.date}</span>
                           </div>
                           <span className="text-[11px] text-amber-400 font-black block mt-1">{session.time}</span>
                         </td>
@@ -879,8 +1130,12 @@ export default function AdminDashboard({
                         <td className="py-4 px-4 text-slate-300">
                           {lawyer ? (
                             <div>
-                              <span className="font-bold block text-slate-100">{lawyer.name}</span>
-                              <span className="text-[10px] text-slate-400">{lawyer.specialty}</span>
+                              <div className="flex items-center gap-1.5">
+                                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                                <span className="font-bold block text-slate-100">{lawyer.name}</span>
+                              </div>
+                              <span className="text-[10px] text-slate-400 block mr-3.5">{lawyer.specialty}</span>
+                              <span className="text-[9px] text-emerald-400 font-bold block mr-3.5 mt-0.5">● متصل بالجلسة حالياً</span>
                             </div>
                           ) : (
                             <span className="font-bold block text-slate-100">{session.lawyerId || 'غير مكلف بعد'}</span>
@@ -896,8 +1151,24 @@ export default function AdminDashboard({
                             <span className="font-bold block text-slate-100">{session.tenantId || 'لا يوجد موكل مرتبط'}</span>
                           )}
                         </td>
-                        <td className="py-4 px-4 text-slate-400 max-w-[150px] truncate" title={session.courtRoom}>
-                          {session.courtRoom}
+                        <td className="py-4 px-4 text-slate-300">
+                          <span className="font-bold block text-slate-200">{session.courtRoom}</span>
+                          {(session.city || session.circuitNo) && (
+                            <span className="text-[10px] text-slate-400 block mt-1">
+                              {session.city && `📍 المدينة: ${session.city}`} {session.circuitNo && ` | دائرة رقم: ${session.circuitNo}`}
+                            </span>
+                          )}
+                          {session.hijriDate && (
+                            <span className="text-[10px] text-amber-500 font-bold block mt-0.5">
+                              📅 هجري: {session.hijriDate}
+                            </span>
+                          )}
+                          {session.agencyNo && (
+                            <span className="text-[10px] text-emerald-400 block mt-1 border-t border-slate-800/40 pt-1">
+                              🔑 وكالة رقم: {session.agencyNo} 
+                              {session.agencyExpiryDate && ` (تنتهي: ${session.agencyExpiryDate})`}
+                            </span>
+                          )}
                         </td>
                         <td className="py-4 px-4">
                           <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-lg ${
@@ -1135,17 +1406,6 @@ export default function AdminDashboard({
                             >
                               {invoice.status === 'paid' ? 'تعديل لـ مستحقة' : 'تحديد كـ مدفوعة'}
                             </button>
-
-                            {invoice.status !== 'paid' && (
-                              <button
-                                onClick={() => sendInvoiceReminderNotification(invoice)}
-                                title="إرسال تذكير سداد عاجل"
-                                className="p-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 rounded-lg transition-colors cursor-pointer border border-amber-500/10"
-                              >
-                                <Bell className="w-4 h-4" />
-                              </button>
-                            )}
-
                             <button
                               onClick={() => {
                                 if (confirm('هل أنت متأكد من حذف هذه الفاتورة؟')) {
@@ -1256,7 +1516,7 @@ export default function AdminDashboard({
                   </button>
                 </form>
               )}
-              
+
               <div className="divide-y divide-slate-800 max-h-[400px] overflow-y-auto pr-1">
                 {lawyers.map(l => (
                   <div key={l.id} className="py-3.5 flex items-center justify-between">
@@ -1403,6 +1663,291 @@ export default function AdminDashboard({
                 ))}
                 {tenants.length === 0 && (
                   <p className="text-xs text-slate-400 text-center py-6">لا يوجد عملاء مقيدين بالمنصة حالياً.</p>
+                )}
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* 5. SEND NOTIFICATION & HISTORY TAB */}
+      {activeTab === 'notifications' && (
+        <div id="notifications-tab-content" className="space-y-6 animate-fade-in text-slate-200">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            {/* Create & Send Notification Form */}
+            <div className="lg:col-span-1 bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4">
+              <div className="flex items-center gap-3 border-b border-slate-800 pb-3">
+                <div className="p-2.5 bg-amber-500/10 text-amber-500 rounded-xl border border-amber-500/10">
+                  <Send className="w-5 h-5 stroke-[1.8]" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-slate-100 text-sm">بث وإرسال إشعار جديد</h3>
+                  <p className="text-[11px] text-slate-400 mt-0.5">إرسال إشعار فوري وحفظه بسجل العميل الموكل.</p>
+                </div>
+              </div>
+
+              <form onSubmit={(e) => {
+                e.preventDefault();
+
+                if (!tabNotifyTargetId) {
+                  alert('الرجاء اختيار العميل المستهدف أولاً.');
+                  return;
+                }
+                if (!tabNotifyTitle || !tabNotifyMessage) {
+                  alert('الرجاء كتابة موضوع التنبيه ومحتوى الرسالة أولاً.');
+                  return;
+                }
+
+                let apiType: 'session' | 'invoice' | 'system' = 'session';
+                if (tabNotifType === 'invoice') {
+                  apiType = 'invoice';
+                }
+
+                const targetRole = tabNotifyTargetId === 'all' ? 'all' : 'tenant';
+
+                onTriggerNotification(
+                  targetRole,
+                  tabNotifyTargetId,
+                  tabNotifyTitle,
+                  tabNotifyMessage,
+                  apiType,
+                  tabNotifyEmail || undefined,
+                  undefined,
+                  'إدارة منصة أصال',
+                  { email: tabNotifySendEmail, sms: false }
+                );
+
+                alert('تم بث الإرسال وتحديث حساب العميل فورا!');
+                setTabNotifyTargetId('');
+                setTabNotifyTitle('');
+                setTabNotifyMessage('');
+                setTabNotifyEmail('');
+                setTabNotifyPhone('');
+              }} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1.5">اختيار العميل المستهدف:</label>
+                  <select
+                    name="targetId"
+                    required
+                    value={tabNotifyTargetId}
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      setTabNotifyTargetId(id);
+                      if (id === 'all') {
+                        setTabNotifyEmail('');
+                        setTabNotifyPhone('');
+                      } else {
+                        const t = tenants.find(item => item.id === id);
+                        if (t) {
+                          setTabNotifyEmail(t.email || '');
+                          setTabNotifyPhone(t.phone || '');
+                        } else {
+                          const l = lawyers.find(item => item.id === id);
+                          if (l) {
+                            setTabNotifyEmail(l.email || '');
+                            setTabNotifyPhone(l.phone || '');
+                          }
+                        }
+                      }
+                    }}
+                    className="w-full text-xs p-3 border border-slate-800 rounded-xl bg-slate-950 text-slate-100 focus:border-amber-500/50 focus:outline-none font-bold"
+                  >
+                    <option value="">-- اختر عميلاً مسجلاً بالمنصة --</option>
+                    <option value="all">إرسال للجميع (كافة العملاء والمستشارين)</option>
+                    {tenants.map(t => (
+                      <option key={t.id} value={t.id}>{t.name} ({t.phone})</option>
+                    ))}
+                  </select>
+                </div>
+
+                {tabNotifyTargetId !== 'all' && tabNotifyTargetId !== '' && (
+                  <div className="space-y-1">
+                    <label className="block text-[10px] text-slate-400 mb-1 flex items-center gap-1.5">
+                      <Mail className="w-3.5 h-3.5 text-amber-500" />
+                      <span>البريد الإلكتروني للمستلم (يمكن تعديله):</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="email"
+                        placeholder="عنوان البريد الإلكتروني الحقيقي"
+                        value={tabNotifyEmail}
+                        onChange={(e) => setTabNotifyEmail(e.target.value)}
+                        className="w-full text-[11px] py-2 pr-9 pl-3 border border-slate-800 rounded-xl bg-slate-950 text-slate-300 focus:border-amber-500 focus:outline-none"
+                      />
+                      <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none">
+                        <Mail className="w-3.5 h-3.5 text-slate-500" />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Notification channels selection - Only Email is Active with icon */}
+                <div className="p-3 bg-slate-950 border border-slate-850 rounded-2xl flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="text-[10px] text-slate-300">قناة الإرسال الفوري:</span>
+                  </div>
+                  <div className="flex items-center gap-1 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-lg text-[10px] text-amber-400 font-extrabold">
+                    <Mail className="w-3 h-3 text-amber-500" />
+                    البريد الإلكتروني المباشر 📧
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1.5">تصنيف التحديث أو الإشعار:</label>
+                  <div className="flex flex-col gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTabNotifType('new_session');
+                        setTabNotifyTitle('جدولة جلسة قضائية جديدة ⚖️');
+                        setTabNotifyMessage('إشعار من منصة أصال القانونية: تم جدولة جلسة قضائية جديدة في ملفكم. يرجى مراجعة تفاصيل ومواعيد الجلسة في بوابتكم القضائية والالتزام بالحضور الإلكتروني.');
+                      }}
+                      className={`w-full py-2 px-3 rounded-xl text-xs font-bold transition-all border flex items-center justify-start gap-2.5 cursor-pointer ${
+                        tabNotifType === 'new_session'
+                          ? 'bg-amber-500/10 border-amber-500 text-amber-400'
+                          : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-300'
+                      }`}
+                    >
+                      <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0" />
+                      <div className="text-right">
+                        <div className="font-bold text-xs">موعد الجلسة (قالب تلقائي)</div>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTabNotifType('session');
+                        setTabNotifyTitle('تحديث هام بشأن موعد جلستكم القضائية ⚖️');
+                        setTabNotifyMessage('إشعار من منصة أصال القانونية: يرجى تفقد جدول الجلسات الخاص بكم للوقوف على آخر التحديثات ومواعيد الجلسات القضائية والالتزام بمواعيد المرافعة الإلكترونية.');
+                      }}
+                      className={`w-full py-2 px-3 rounded-xl text-xs font-bold transition-all border flex items-center justify-start gap-2.5 cursor-pointer ${
+                        tabNotifType === 'session'
+                          ? 'bg-amber-500/10 border-amber-500 text-amber-400'
+                          : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-300'
+                      }`}
+                    >
+                      <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+                      <div className="text-right">
+                        <div className="font-bold text-xs">تحديث أو تأجيل جلسة (قالب تلقائي)</div>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setTabNotifType('invoice');
+                        setTabNotifyTitle('مطالبة مالية وسداد أتعاب قانونية 💳');
+                        setTabNotifyMessage('إشعار من منصة أصال القانونية: تم تحديث حسابكم بمطالبة مالية عاجلة أو فاتورة أتعاب قانونية جديدة مستحقة السداد. يرجى مراجعة قسم الفواتير وسداد المستحقات الكترونياً.');
+                      }}
+                      className={`w-full py-2 px-3 rounded-xl text-xs font-bold transition-all border flex items-center justify-start gap-2.5 cursor-pointer ${
+                        tabNotifType === 'invoice'
+                          ? 'bg-emerald-500/10 border-emerald-500 text-emerald-400'
+                          : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-300'
+                      }`}
+                    >
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                      <div className="text-right">
+                        <div className="font-bold text-xs">مطالبة مالية وسداد (قالب تلقائي)</div>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1.5">عنوان التنبيه الرئيسي (موضوع البريد الإلكتروني):</label>
+                  <input
+                    type="text"
+                    required
+                    value={tabNotifyTitle}
+                    onChange={(e) => setTabNotifyTitle(e.target.value)}
+                    placeholder="موضوع البريد الإلكتروني..."
+                    className="w-full text-xs p-2.5 border border-slate-800 rounded-xl bg-slate-950 text-slate-100 focus:border-amber-500/50 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1.5">محتوى رسالة الإشعار والبريد الإلكتروني:</label>
+                  <textarea
+                    required
+                    value={tabNotifyMessage}
+                    onChange={(e) => setTabNotifyMessage(e.target.value)}
+                    placeholder="اكتب هنا التفاصيل لكي تصل في البريد الإلكتروني الحقيقي..."
+                    rows={4}
+                    className="w-full text-xs p-2.5 border border-slate-800 rounded-xl bg-slate-950 text-slate-100 focus:border-amber-500/50 focus:outline-none resize-none"
+                  />
+                </div>
+
+                <div className="p-3 bg-slate-950 rounded-2xl border border-slate-850 flex items-center gap-2 mt-1">
+                  <span className="text-amber-400 font-extrabold text-[10px] shrink-0">✉️ إرسال بريد حقيقي:</span>
+                  <p className="text-[9px] text-slate-400 leading-normal">
+                    يمكنك تعديل العنوان والمحتوى والبريد أعلاه بحرية تامة، وسيتم إرسال بريد إلكتروني حقيقي للمستلم من خلال خادم أصال.
+                  </p>
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full py-3 bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 rounded-xl text-xs font-black transition-all cursor-pointer shadow-md shadow-amber-500/10 flex items-center justify-center gap-1.5"
+                >
+                  <Send className="w-4 h-4" />
+                  إرسال البريد الإلكتروني والإشعار فورا
+                </button>
+              </form>
+            </div>
+
+            {/* Notifications Sent History Log */}
+            <div className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-amber-500/10 text-amber-500 rounded-xl border border-amber-500/10">
+                    <Bell className="w-5 h-5 stroke-[1.8]" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-slate-100 text-sm">سجل الإشعارات المرسلة</h3>
+                    <p className="text-[11px] text-slate-400 mt-0.5">عرض ومراقبة كافة الإشعارات الصادرة وحالاتها الموزعة.</p>
+                  </div>
+                </div>
+                {notifications.length > 0 && onClearNotifications && (
+                  <button
+                    onClick={onClearNotifications}
+                    className="text-xs text-red-400 hover:text-red-300 font-bold transition-colors cursor-pointer"
+                  >
+                    تفريغ السجل بالكامل
+                  </button>
+                )}
+              </div>
+
+              <div className="divide-y divide-slate-800/60 max-h-[500px] overflow-y-auto pr-2 space-y-3">
+                {notifications.map((notif) => {
+                  const recipient = tenants.find(t => t.id === notif.targetId) || lawyers.find(l => l.id === notif.targetId);
+                  return (
+                    <div key={notif.id} className="py-3 flex items-start justify-between gap-4">
+                      <div className="w-full">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-[9px] font-black px-2 py-0.5 rounded-md ${
+                            notif.type === 'session' 
+                              ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' 
+                              : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                          }`}>
+                            {notif.type === 'session' ? 'جلسة مرافعة' : 'سداد ومطالبة'}
+                          </span>
+                          <span className="text-[10px] text-slate-500">{notif.timestamp}</span>
+                          <span className="text-[10px] text-slate-400">بواسطة: {notif.sender || 'إدارة منصة أصال'}</span>
+                        </div>
+                        <h4 className="font-extrabold text-xs text-slate-200 mt-1.5">{notif.title}</h4>
+                        <p className="text-xs text-slate-400 mt-1 leading-relaxed">{notif.message}</p>
+                        <span className="text-[10px] text-amber-500 font-medium block mt-1.5">
+                          المستلم: {notif.targetRole === 'all' ? 'جميع المسجلين' : (recipient ? `${recipient.name} (${recipient.phone})` : `معرف: ${notif.targetId}`)}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+                {notifications.length === 0 && (
+                  <p className="text-xs text-slate-400 text-center py-12">لا توجد إشعارات مرسلة حالياً في السجل.</p>
                 )}
               </div>
             </div>

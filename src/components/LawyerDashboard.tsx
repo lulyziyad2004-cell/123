@@ -14,7 +14,8 @@ import {
   CheckCircle2,
   FileText,
   Scale,
-  Phone
+  Phone,
+  X
 } from 'lucide-react';
 
 interface LawyerDashboardProps {
@@ -31,6 +32,7 @@ interface LawyerDashboardProps {
     type: 'session' | 'invoice' | 'system'
   ) => void;
   loggedLawyerId?: string;
+  onClearNotifications?: () => void;
 }
 
 export default function LawyerDashboard({
@@ -40,7 +42,8 @@ export default function LawyerDashboard({
   notifications,
   onMarkNotificationRead,
   onTriggerNotification,
-  loggedLawyerId
+  loggedLawyerId,
+  onClearNotifications
 }: LawyerDashboardProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -63,7 +66,7 @@ export default function LawyerDashboard({
   }
 
   // Filter sessions assigned to this specific lawyer
-  const lawyerSessions = sessions.filter(s => s.lawyerId === activeLawyer.id);
+  const lawyerSessions = sessions.filter(s => s.lawyerId === activeLawyer.id || s.lawyerId === activeLawyer.name);
 
   // Apply search & status filters
   const filteredSessions = lawyerSessions.filter(s => {
@@ -76,10 +79,13 @@ export default function LawyerDashboard({
     return matchesSearch && matchesStatus;
   });
 
-  // Filter notifications for this lawyer
-  const lawyerNotifications = notifications.filter(
-    n => (n.targetRole === 'lawyer' && n.targetId === activeLawyer.id) || n.targetRole === 'all'
-  );
+  // Filter notifications for this lawyer sorted chronologically (Newest first, excluding system welcome)
+  const lawyerNotifications = [...notifications]
+    .filter(n => 
+      (((n.targetRole === 'lawyer' && (n.targetId === activeLawyer.id || n.targetId === activeLawyer.name)) || n.targetRole === 'all') &&
+      n.type !== 'system')
+    )
+    .sort((a, b) => b.id.localeCompare(a.id));
   
   const unreadNotificationsCount = lawyerNotifications.filter(n => !n.isRead).length;
 
@@ -201,23 +207,31 @@ export default function LawyerDashboard({
                 </span>
               )}
             </h3>
-            {unreadNotificationsCount > 0 && (
-              <button 
-                onClick={() => {
-                  lawyerNotifications.forEach(n => onMarkNotificationRead(n.id));
-                }}
-                className="text-xs text-amber-400 hover:text-amber-300 font-bold cursor-pointer"
-              >
-                تحديد الكل كمقروء
-              </button>
-            )}
+            <div className="flex items-center gap-3">
+              {unreadNotificationsCount > 0 && (
+                <button 
+                  onClick={() => {
+                    lawyerNotifications.forEach(n => onMarkNotificationRead(n.id));
+                  }}
+                  className="text-xs text-amber-400 hover:text-amber-300 font-bold cursor-pointer"
+                >
+                  تحديد الكل كمقروء
+                </button>
+              )}
+              {lawyerNotifications.length > 0 && onClearNotifications && (
+                <button 
+                  onClick={onClearNotifications}
+                  className="text-xs text-slate-400 hover:text-red-400 font-bold cursor-pointer"
+                >
+                  مسح التنبيهات
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="divide-y divide-slate-800 max-h-[190px] overflow-y-auto pr-2">
             {lawyerNotifications.length === 0 ? (
-              <div className="text-center py-10 text-slate-500 text-xs">
-                لا توجد تنبيهات أو قضايا جديدة مسندة إليك حالياً.
-              </div>
+              <p className="text-xs text-slate-500 py-6 text-center">لا توجد تنبيهات قضائية جديدة مسندة إليك حالياً.</p>
             ) : (
               lawyerNotifications.map(notif => (
                 <div 
@@ -304,15 +318,19 @@ export default function LawyerDashboard({
                   }`}
                 >
                   <div>
-                    {/* Header: Case ID and Status */}
+                     {/* Header: Case ID and Status */}
                     <div className="flex justify-between items-start gap-2 mb-3">
                       <div>
                         <span className="text-[9px] font-mono font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2.5 py-1 rounded-lg">
                           رمز الدعوى: {session.caseId}
                         </span>
-                        <h4 className="font-bold text-sm text-slate-100 mt-2 leading-normal">
-                          {session.caseTitle}
-                        </h4>
+                        <div className="flex items-center gap-2 mt-2">
+                          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                          <h4 className="font-bold text-sm text-slate-100 leading-normal">
+                            {session.caseTitle}
+                          </h4>
+                        </div>
+                        <span className="text-[10px] text-emerald-400 font-bold block mt-1.5">● أنت متصل ومثبّت بهذه الجلسة القضائية</span>
                       </div>
                       <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-lg shrink-0 ${
                         session.status === 'scheduled' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' :
@@ -324,16 +342,33 @@ export default function LawyerDashboard({
                     </div>
 
                     {/* Court Location and Time */}
-                    <div className="bg-slate-900 border border-slate-850 p-3.5 rounded-2xl space-y-2 mb-4 text-xs text-slate-300">
-                      <div className="flex items-center gap-2">
-                        <Clock className="w-4.5 h-4.5 text-amber-400 shrink-0" />
-                        <span className="font-bold text-slate-200">{session.day} - {session.date}</span>
+                    <div className="bg-slate-900 border border-slate-850 p-3.5 rounded-2xl space-y-2.5 mb-4 text-xs text-slate-300">
+                      <div className="flex items-center gap-2 text-amber-400 font-bold">
+                        <Clock className="w-4.5 h-4.5 text-amber-500 shrink-0" />
+                        <span>{session.day} - {session.hijriDate || session.date}</span>
                         <span className="text-amber-400 font-extrabold mr-auto bg-amber-500/10 px-2 py-0.5 rounded-lg">{session.time}</span>
                       </div>
-                      <div className="flex items-start gap-2 pt-2 border-t border-slate-800/60">
-                        <MapPin className="w-4 h-4 text-slate-500 shrink-0 mt-0.5" />
-                        <span className="text-slate-400 font-medium">{session.courtRoom}</span>
+
+                      <div className="flex flex-col gap-1 pt-2 border-t border-slate-800/60">
+                        <div className="flex items-start gap-2">
+                          <MapPin className="w-4 h-4 text-slate-500 shrink-0 mt-0.5" />
+                          <span className="text-slate-200 font-medium">{session.courtRoom}</span>
+                        </div>
+                        {(session.city || session.circuitNo) && (
+                          <div className="text-[10px] text-slate-400 mr-6">
+                            {session.city && `📍 المدينة: ${session.city}`}
+                            {session.circuitNo && ` | الدائرة: ${session.circuitNo}`}
+                          </div>
+                        )}
                       </div>
+
+                      {session.agencyNo && (
+                        <div className="text-[11px] text-emerald-400 bg-emerald-500/5 border border-emerald-500/10 p-2.5 rounded-xl flex flex-col gap-0.5 mt-1.5">
+                          <span className="font-bold">🔑 تفاصيل الوكالة المعتمدة:</span>
+                          <span className="text-[10px] text-slate-300">رقم الوكالة: {session.agencyNo}</span>
+                          {session.agencyExpiryDate && <span className="text-[10px] text-slate-400">تاريخ الانتهاء: {session.agencyExpiryDate}</span>}
+                        </div>
+                      )}
                     </div>
 
                     {/* Parties In Dispute */}
