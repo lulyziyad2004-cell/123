@@ -216,20 +216,6 @@ export default function Login({
       return;
     }
 
-    const cleanRegName = regName.replace(/\s+/g, '');
-    if (
-      cleanRegName.includes('محمداحمد') || 
-      cleanRegName.includes('محمدأحمد') || 
-      cleanRegName.includes('عمر') || 
-      cleanRegName.includes('عخم') || 
-      cleanRegName.toLowerCase().includes('omar') || 
-      cleanRegName.toLowerCase().includes('akhm') || 
-      cleanRegName.toLowerCase().includes('ekhm')
-    ) {
-      setRegError('الاسم المدخل غير مسموح به للتسجيل في النظام.');
-      return;
-    }
-
     const emailLower = regEmail.trim().toLowerCase();
 
     // Pre-check basic email uniqueness in local cached list as a fast validation
@@ -283,6 +269,36 @@ export default function Login({
 
         await setDoc(doc(db, 'tenants', uid), newTenant);
         onRegisterTenant(newTenant);
+      }
+
+      // Generate a real-time notification document in Firestore for new registrations
+      try {
+        const registerNotificationId = `N-${Date.now().toString().slice(-4)}-REG-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+        const roleArabic = regRole === 'lawyer' ? 'مستشار وقانوني' : 'عميل موكل';
+        const specialtyOrProperty = regRole === 'lawyer' ? regSpecialty.trim() : regPropertyNo.trim();
+        const registrationNotification = {
+          id: registerNotificationId,
+          targetRole: 'all',
+          targetId: 'all',
+          title: `👤 تسجيل عضو جديد: ${regName.trim()} (${roleArabic})`,
+          message: `تم انضمام ${regName.trim()} كعضو جديد في المنصة بصفة (${roleArabic}). البريد الإلكتروني: ${emailLower}، الجوال: ${regPhone.trim()}${regRole === 'lawyer' ? `، التخصص: ${specialtyOrProperty}` : `، القضية/العقد: ${specialtyOrProperty}`}.`,
+          timestamp: new Date().toLocaleDateString('ar-SA', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true
+          }),
+          isRead: false,
+          type: 'system',
+          sender: 'بوابة التسجيل الذكية'
+        };
+
+        await setDoc(doc(db, 'notifications', registerNotificationId), registrationNotification);
+        console.log("Registration notification successfully synced to Firestore:", registerNotificationId);
+      } catch (notifErr) {
+        console.warn("Failed to create registration notification in Firestore:", notifErr);
       }
 
       // 3. Send Email Verification link via Firebase Auth

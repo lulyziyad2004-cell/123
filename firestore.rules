@@ -1,32 +1,7 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Global safety net
     match /{document=**} {
-      allow read, write: if false;
-    }
-
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    match /lawyers/{lawyerId} {
-      allow read, write: if true;
-    }
-
-    match /tenants/{tenantId} {
-      allow read, write: if true;
-    }
-
-    match /sessions/{sessionId} {
-      allow read, write: if true;
-    }
-
-    match /invoices/{invoiceId} {
-      allow read, write: if true;
-    }
-
-    match /notifications/{notificationId} {
       allow read, write: if true;
     }
   }

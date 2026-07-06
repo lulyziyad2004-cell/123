@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Role, Session, Invoice, Notification, Lawyer, Tenant, UserSession } from './types';
 import { 
   INITIAL_LAWYERS, 
@@ -136,6 +136,21 @@ export default function App() {
   // Database Connection / Configuration Error State
   const [dbError, setDbError] = useState<string | null>(null);
 
+  // Track initial load of notifications to prevent initial historical spamming of toasts
+  const isInitialNotifLoaded = useRef(false);
+
+  // Keep references to prevent stale closures in real-time snapshot listeners
+  const userSessionRef = useRef(userSession);
+  const soundEnabledRef = useRef(soundEnabled);
+
+  useEffect(() => {
+    userSessionRef.current = userSession;
+  }, [userSession]);
+
+  useEffect(() => {
+    soundEnabledRef.current = soundEnabled;
+  }, [soundEnabled]);
+
   useEffect(() => {
     onDatabaseError((err, path, operation) => {
       console.warn(`Captured database error for path [${path}] during [${operation}]:`, err);
@@ -199,7 +214,62 @@ export default function App() {
       snapshot.forEach((docSnap) => {
         list.push(docSnap.data() as Notification);
       });
-      setNotifications(list.sort((a, b) => b.id.localeCompare(a.id)));
+      const sorted = list.sort((a, b) => b.id.localeCompare(a.id));
+      setNotifications(sorted);
+
+      // Trigger active toast alert and audio chime when a new notification is added in real-time
+      if (isInitialNotifLoaded.current) {
+        snapshot.docChanges().forEach((change) => {
+          if (change.type === 'added') {
+            const notif = change.doc.data() as Notification;
+            
+            // Determine if the notification is relevant to display a toast to the current user
+            const currentSession = userSessionRef.current;
+            const isRelevant = 
+              !currentSession || 
+              currentSession.role === 'admin' ||
+              notif.targetRole === 'all' ||
+              (currentSession.role === 'lawyer' && (notif.targetRole === 'lawyer' && (notif.targetId === 'all' || notif.targetId === currentSession.id))) ||
+              (currentSession.role === 'tenant' && (notif.targetRole === 'tenant' && (notif.targetId === 'all' || notif.targetId === currentSession.id)));
+
+            if (isRelevant) {
+              setActiveToast({
+                id: notif.id,
+                title: notif.title,
+                message: notif.message,
+                type: notif.type
+              });
+
+              // Play high-fidelity synthesized browser chime if sound is enabled
+              if (soundEnabledRef.current) {
+                try {
+                  const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+                  const oscillator = audioCtx.createOscillator();
+                  const gainNode = audioCtx.createGain();
+                  
+                  oscillator.connect(gainNode);
+                  gainNode.connect(audioCtx.destination);
+                  
+                  oscillator.type = 'sine';
+                  // Elegant dual-tone chime
+                  oscillator.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
+                  oscillator.frequency.setValueAtTime(880, audioCtx.currentTime + 0.12); // A5
+                  
+                  gainNode.gain.setValueAtTime(0.12, audioCtx.currentTime);
+                  gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.45);
+                  
+                  oscillator.start();
+                  oscillator.stop(audioCtx.currentTime + 0.45);
+                } catch (chimeErr) {
+                  console.warn("Real-time notification audio chime blocked or failed:", chimeErr);
+                }
+              }
+            }
+          }
+        });
+      } else {
+        isInitialNotifLoaded.current = true;
+      }
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, 'notifications');
     });

@@ -52,8 +52,6 @@ export default function TenantDashboard({
 }: TenantDashboardProps) {
   // Payment Modal State
   const [activePaymentInvoice, setActivePaymentInvoice] = useState<Invoice | null>(null);
-  const [cardNumber, setCardNumber] = useState('');
-  const [cardHolder, setCardHolder] = useState('');
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [paymentLoading, setPaymentLoading] = useState(false);
 
@@ -85,8 +83,6 @@ export default function TenantDashboard({
 
   const handlePayClick = (invoice: Invoice) => {
     setActivePaymentInvoice(invoice);
-    setCardHolder(activeTenant.name);
-    setCardNumber('4000 1234 5678 9010');
     setPaymentSuccess(false);
     setPaymentLoading(false);
   };
@@ -97,7 +93,7 @@ export default function TenantDashboard({
 
     setPaymentLoading(true);
     
-    // Simulate API request delay
+    // Simulate brief confirmation delay (extremely fast)
     setTimeout(() => {
       onUpdateInvoiceStatus(activePaymentInvoice.id, 'paid');
       
@@ -106,7 +102,7 @@ export default function TenantDashboard({
         'all',
         '',
         'تأكيد سداد أتعاب قضائية',
-        `قام الموكل والعميل "${activeTenant.name}" بسداد الفاتورة رقم ${activePaymentInvoice.id} بقيمة ${activePaymentInvoice.amount.toLocaleString()} ريال بنجاح عن طريق الدفع الإلكتروني المباشر.`,
+        `قام الموكل والعميل "${activeTenant.name}" باعتماد وسداد الفاتورة رقم ${activePaymentInvoice.id} بقيمة ${activePaymentInvoice.amount.toLocaleString()} ريال بنجاح ومباشرة دون دفع أو بطاقة ائتمان.`,
         'invoice'
       );
 
@@ -119,7 +115,7 @@ export default function TenantDashboard({
         setPaymentSuccess(false);
       }, 2500);
 
-    }, 1500);
+    }, 600);
   };
 
   return (
@@ -534,76 +530,38 @@ export default function TenantDashboard({
                     </div>
                   </div>
 
-                  {/* Card fields */}
-                  <div className="space-y-3 pt-2">
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-400 mb-1">اسم الموكل حامل البطاقة:</label>
-                      <input
-                        type="text"
-                        value={cardHolder}
-                        onChange={(e) => setCardHolder(e.target.value)}
-                        required
-                        className="w-full text-xs p-2.5 border border-slate-800 rounded-xl bg-slate-950 text-slate-200 focus:border-amber-500 focus:outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-400 mb-1">رقم بطاقة مدى / فيزا / ماستركارد:</label>
-                      <input
-                        type="text"
-                        value={cardNumber}
-                        onChange={(e) => setCardNumber(e.target.value)}
-                        required
-                        placeholder="XXXX XXXX XXXX XXXX"
-                        className="w-full text-xs p-2.5 border border-slate-800 rounded-xl bg-slate-950 text-slate-200 focus:border-amber-500 focus:outline-none font-mono"
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-400 mb-1">تاريخ الانتهاء:</label>
-                        <input
-                          type="text"
-                          required
-                          placeholder="MM/YY"
-                          defaultValue="12/29"
-                          className="w-full text-xs p-2.5 border border-slate-800 rounded-xl bg-slate-950 text-slate-200 focus:border-amber-500 focus:outline-none font-mono"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-400 mb-1">الرمز السري (CVV):</label>
-                        <input
-                          type="password"
-                          required
-                          maxLength={3}
-                          defaultValue="993"
-                          className="w-full text-xs p-2.5 border border-slate-800 rounded-xl bg-slate-950 text-slate-200 focus:border-amber-500 focus:outline-none font-mono"
-                        />
-                      </div>
-                    </div>
+                  {/* Bypassed Payment Notice */}
+                  <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl space-y-1.5 my-3">
+                    <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
+                      <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                      بوابة السداد السريع (إعفاء وموافقة مباشرة)
+                    </span>
+                    <p className="text-[11px] text-slate-300 leading-normal text-right">
+                      بناءً على طلبكم، تم إلغاء وإيقاف نموذج طلب بطاقة الائتمان بالكامل من المنصة. يمكنك الآن تأكيد سداد واعتماد هذه الفاتورة بشكل مباشر ومجاني بالكامل بضغطة زر واحدة.
+                    </p>
                   </div>
 
-                  <div className="pt-3">
+                  <div className="pt-2">
                     <button
                       type="submit"
                       disabled={paymentLoading}
-                      className="w-full bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-400 text-slate-950 font-black py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer transition-all disabled:opacity-50 shadow-lg shadow-amber-500/5"
+                      className="w-full bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-slate-950 font-black py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-2 cursor-pointer transition-all disabled:opacity-50 shadow-lg shadow-emerald-500/5"
                     >
                       {paymentLoading ? (
-                        <span className="flex items-center gap-2 animate-pulse">
-                          ⏳ جارٍ تأمين ونقل الأموال رقمياً...
+                        <span className="flex items-center gap-2 animate-pulse text-slate-950 font-black">
+                          ⏳ جارٍ اعتماد وتأكيد السداد المالي...
                         </span>
                       ) : (
                         <>
-                          <Sparkles className="w-4 h-4 text-amber-950 fill-amber-950" />
-                          تـأكـيـد وسـداد الـمـبـلـغ
+                          <Sparkles className="w-4 h-4 text-emerald-950 fill-emerald-950" />
+                          تـأكـيـد واعـتـمـاد الـسـداد الآن (مباشر ومجاني)
                         </>
                       )}
                     </button>
                   </div>
 
                   <p className="text-[9px] text-slate-500 text-center leading-relaxed">
-                    🔒 نظام محاكاة آمن - لن يتم استخدام أو سحب أي مبالغ حقيقية من بطاقتك الشخصية.
+                    🔒 تم تفعيل خيار الإعفاء المالي وتجاوز بوابات السداد لراحتكم.
                   </p>
                 </form>
               )}

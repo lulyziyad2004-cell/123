@@ -1,10 +1,10 @@
 {
-  "projectId": "law-platform-1dd66",
-  "appId": "1:722939992889:web:ac9e20c637394b0c54a6e8",
-  "apiKey": "AIzaSyCxv-6cx5oCjtrcQr7s2y4WVW2AfwzG70w",
-  "authDomain": "law-platform-1dd66.firebaseapp.com",
+  "projectId": "project-8266131663595369541",
+  "appId": "1:300022035192:web:b4d8acc55cc16434d8c10d",
+  "apiKey": "AIzaSyDzEu1xUdrZ5g6IZDjcNVyUHV51Dso0yyk",
+  "authDomain": "project-8266131663595369541.firebaseapp.com",
   "firestoreDatabaseId": "ai-studio-lawsync-17e78585-96d2-44d9-919f-05f8c5d8280f",
-  "storageBucket": "law-platform-1dd66.firebasestorage.app",
-  "messagingSenderId": "722939992889",
+  "storageBucket": "project-8266131663595369541.firebasestorage.app",
+  "messagingSenderId": "300022035192",
   "measurementId": ""
 }
